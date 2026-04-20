@@ -74,6 +74,15 @@ export default function Home() {
     [readyPosts]
   )
 
+  // Safe fallback:
+  // If no post is active yet, make the first ready post active immediately.
+  useEffect(() => {
+    if (showCreatePanel) return
+    if (readyPosts.length === 0) return
+
+    setActivePostId((prev) => prev ?? readyPosts[0].id)
+  }, [readyPosts, showCreatePanel])
+
   useEffect(() => {
     if (showCreatePanel) {
       setActivePostId(null)

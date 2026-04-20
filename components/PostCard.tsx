@@ -145,7 +145,7 @@ export default function PostCard({
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
         />
       ) : hasImage ? (
         <Image
