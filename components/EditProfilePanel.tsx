@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import type { ProfileData } from '@/hooks/useProfile'
 
@@ -84,7 +85,6 @@ export default function EditProfilePanel({
         bio,
         avatarFile,
       })
-      onClose()
     } catch (err: any) {
       console.error(err)
 
@@ -110,13 +110,24 @@ export default function EditProfilePanel({
         <h2 className="mb-4 text-xl font-semibold">Edit Profile</h2>
 
         <div className="mb-4 flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-zinc-800">
+          <div className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-zinc-800">
             {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Avatar preview"
-                className="h-full w-full object-cover"
-              />
+              avatarFile ? (
+                <img
+                  src={previewUrl}
+                  alt="Avatar preview"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Image
+                  src={previewUrl}
+                  alt="Avatar preview"
+                  width={64}
+                  height={64}
+                  sizes="64px"
+                  className="h-full w-full object-cover"
+                />
+              )
             ) : (
               <span className="text-lg font-semibold">
                 {(username || profile.username || 'U').charAt(0).toUpperCase()}
@@ -124,12 +135,17 @@ export default function EditProfilePanel({
             )}
           </div>
 
-          <label className="cursor-pointer rounded-full bg-white px-4 py-2 text-sm font-medium text-black">
+          <label
+            className={`cursor-pointer rounded-full bg-white px-4 py-2 text-sm font-medium text-black ${
+              loading ? 'pointer-events-none opacity-50' : ''
+            }`}
+          >
             Change photo
             <input
               type="file"
               accept="image/*"
               className="hidden"
+              disabled={loading}
               onChange={(e) => {
                 const file = e.target.files?.[0] || null
                 setAvatarFile(file)
@@ -141,27 +157,30 @@ export default function EditProfilePanel({
         <label className="mb-2 block text-sm text-zinc-300">Username</label>
         <input
           value={username}
+          disabled={loading}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username"
-          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none"
+          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
         />
 
         <label className="mb-2 block text-sm text-zinc-300">Full name</label>
         <input
           value={fullName}
+          disabled={loading}
           onChange={(e) => setFullName(e.target.value)}
           placeholder="Full name"
-          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none"
+          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
         />
 
         <label className="mb-2 block text-sm text-zinc-300">Bio</label>
         <textarea
           value={bio}
+          disabled={loading}
           onChange={(e) => setBio(e.target.value)}
           placeholder="Write something about yourself"
           maxLength={160}
           rows={4}
-          className="mb-2 w-full rounded-xl bg-zinc-800 p-3 outline-none"
+          className="mb-2 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
         />
 
         <p className="mb-4 text-right text-xs text-zinc-500">{bio.length}/160</p>
@@ -172,7 +191,8 @@ export default function EditProfilePanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full px-4 py-2 text-zinc-400"
+            disabled={loading}
+            className="rounded-full px-4 py-2 text-zinc-400 disabled:opacity-50"
           >
             Cancel
           </button>

@@ -16,37 +16,53 @@ export function useAuthUser(): UseAuthUserReturn {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    async function init() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    let isMounted = true
 
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
+    async function syncUser(sessionUser: User | null) {
+      if (!isMounted) return
 
-      if (currentUser) {
-        await ensureUserProfile(currentUser)
+      setUser(sessionUser)
+
+      if (sessionUser) {
+        try {
+          await ensureUserProfile(sessionUser)
+        } catch (error) {
+          console.error('ensureUserProfile failed:', error)
+        }
       }
 
-      setAuthLoading(false)
+      if (isMounted) {
+        setAuthLoading(false)
+      }
     }
 
-    init()
+    async function init() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        await syncUser(session?.user ?? null)
+      } catch (error) {
+        console.error('Auth init failed:', error)
+
+        if (isMounted) {
+          setUser(null)
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    void init()
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-
-      if (currentUser) {
-        await ensureUserProfile(currentUser)
-      }
-
-      setAuthLoading(false)
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncUser(session?.user ?? null)
     })
 
     return () => {
+      isMounted = false
       subscription.unsubscribe()
     }
   }, [])

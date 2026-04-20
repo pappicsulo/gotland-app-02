@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 
 import { useProfile } from '@/hooks/useProfile'
+import { useAuthUser } from '@/hooks/useAuthUser'
 import { updateProfile, uploadAvatarImage } from '@/lib/profile'
+import { deletePostRecord } from '@/lib/posts'
+import { stopAudio } from '@/lib/audio'
 import EditProfilePanel from '@/components/EditProfilePanel'
 import PostCard from '@/components/PostCard'
 import MobileShell from '@/components/MobileShell'
@@ -12,11 +16,19 @@ import MobileShell from '@/components/MobileShell'
 export default function ProfilePage() {
   const params = useParams()
   const router = useRouter()
+  const { user } = useAuthUser()
 
   const profileId = params?.id as string
   const [editOpen, setEditOpen] = useState(false)
-  const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(null)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [activePostId, setActivePostId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
+
   const overlayScrollRef = useRef<HTMLDivElement | null>(null)
+  const postRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasScrolledToInitialPostRef = useRef(false)
 
   const {
     profile,
@@ -33,20 +45,148 @@ export default function ProfilePage() {
     handleToggleFollow,
   } = useProfile(profileId)
 
+  const readyPosts = useMemo(
+    () => posts.filter((post) => post.upload_status === 'ready'),
+    [posts]
+  )
+
+  function updateActivePostFromScroll() {
+    const container = overlayScrollRef.current
+    if (!container || readyPosts.length === 0) return
+
+    const containerRect = container.getBoundingClientRect()
+    const containerCenter = containerRect.top + containerRect.height / 2
+
+    let closestPostId: string | null = null
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    for (const post of readyPosts) {
+      const el = postRefs.current[post.id]
+      if (!el) continue
+
+      const rect = el.getBoundingClientRect()
+      const postCenter = rect.top + rect.height / 2
+      const distance = Math.abs(postCenter - containerCenter)
+
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestPostId = post.id
+      }
+    }
+
+    if (closestPostId) {
+      setActivePostId((prev) => (prev === closestPostId ? prev : closestPostId))
+    }
+  }
+
+  async function handleDeletePost(
+    postId: string,
+    imageUrl?: string | null,
+    videoUrl?: string | null
+  ) {
+    if (!currentUserId || deleteLoading) return
+
+    setDeleteLoading(true)
+
+    try {
+      await deletePostRecord({
+        postId,
+        userId: currentUserId,
+        imageUrl,
+        videoUrl,
+      })
+
+      const remainingReadyPosts = readyPosts.filter((post) => post.id !== postId)
+
+      if (remainingReadyPosts.length === 0) {
+        setSelectedPostId(null)
+        setActivePostId(null)
+        hasScrolledToInitialPostRef.current = false
+        stopAudio()
+      } else if (selectedPostId === postId) {
+        const deletedIndex = readyPosts.findIndex((post) => post.id === postId)
+        const nextIndex = Math.min(
+          Math.max(deletedIndex, 0),
+          remainingReadyPosts.length - 1
+        )
+        setSelectedPostId(remainingReadyPosts[nextIndex]?.id ?? null)
+        hasScrolledToInitialPostRef.current = false
+      }
+
+      await refreshProfilePage()
+    } catch (error: any) {
+      console.error(error)
+      alert(error?.message || 'Could not delete post.')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   useEffect(() => {
-    if (selectedPostIndex === null) return
-    if (!overlayScrollRef.current) return
+    if (!selectedPostId) return
 
     const container = overlayScrollRef.current
-    const child = container.children[selectedPostIndex] as HTMLElement | undefined
+    if (!container) return
 
-    if (child) {
-      child.scrollIntoView({
-        behavior: 'auto',
-        block: 'start',
-      })
+    const selectedPost = readyPosts.find((post) => post.id === selectedPostId)
+
+    if (!selectedPost) {
+      setSelectedPostId(null)
+      setActivePostId(null)
+      hasScrolledToInitialPostRef.current = false
+      stopAudio()
+      return
     }
-  }, [selectedPostIndex])
+
+    setActivePostId((prev) => prev ?? selectedPost.id)
+
+    if (!hasScrolledToInitialPostRef.current) {
+      const selectedEl = postRefs.current[selectedPost.id]
+
+      if (selectedEl) {
+        selectedEl.scrollIntoView({
+          behavior: 'auto',
+          block: 'start',
+        })
+        hasScrolledToInitialPostRef.current = true
+      }
+    }
+
+    const handleScroll = () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        updateActivePostFromScroll()
+      }, 60)
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+
+    const rafId = requestAnimationFrame(() => {
+      updateActivePostFromScroll()
+    })
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+        scrollTimeoutRef.current = null
+      }
+
+      cancelAnimationFrame(rafId)
+    }
+  }, [selectedPostId, readyPosts])
+
+  useEffect(() => {
+    if (selectedPostId === null) {
+      setActivePostId(null)
+      hasScrolledToInitialPostRef.current = false
+      stopAudio()
+    }
+  }, [selectedPostId])
 
   if (loading) {
     return (
@@ -96,11 +236,14 @@ export default function ProfilePage() {
               <h1 className="mt-1 text-2xl font-bold">@{profile.username}</h1>
 
               <div className="mt-3 flex items-center justify-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-lg font-semibold backdrop-blur">
+                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-lg font-semibold backdrop-blur">
                   {profile.avatar_url ? (
-                    <img
+                    <Image
                       src={profile.avatar_url}
                       alt={`${profile.username} avatar`}
+                      width={56}
+                      height={56}
+                      sizes="56px"
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -129,9 +272,10 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setEditOpen(true)}
-                    className="rounded-full bg-white px-5 py-2 text-sm font-medium text-black transition hover:opacity-90"
+                    disabled={saveLoading}
+                    className="rounded-full bg-white px-5 py-2 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
                   >
-                    Edit Profile
+                    {saveLoading ? 'Saving...' : 'Edit Profile'}
                   </button>
                 </div>
               )}
@@ -174,82 +318,171 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {posts.map((post, index) => (
-                <button
-                  key={post.id}
-                  type="button"
-                  onClick={() => setSelectedPostIndex(index)}
-                  className="group relative aspect-[3/4] overflow-hidden rounded-2xl bg-zinc-900 text-left"
-                >
-                  <img
-                    src={post.image_url}
-                    alt={post.caption || 'Post image'}
-                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                  />
+              {posts.map((post) => {
+                const isVideoPost = post.media_type === 'video' && !!post.video_url
+                const isProcessing = post.upload_status === 'processing'
+                const isFailed = post.upload_status === 'failed'
+                const canOpenPost = post.upload_status === 'ready'
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                return (
+                  <button
+                    key={post.id}
+                    type="button"
+                    onClick={() => {
+                      if (!canOpenPost) return
+                      setSelectedPostId(post.id)
+                    }}
+                    className={`group relative aspect-[3/4] overflow-hidden rounded-2xl bg-zinc-900 text-left ${
+                      canOpenPost ? '' : 'cursor-default'
+                    }`}
+                  >
+                    {isVideoPost ? (
+                      <video
+                        src={post.video_url ?? undefined}
+                        className={`h-full w-full object-cover ${
+                          isProcessing || isFailed ? 'opacity-40' : ''
+                        }`}
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : post.image_url ? (
+                      <Image
+                        src={post.image_url}
+                        alt={post.caption || 'Post image'}
+                        fill
+                        sizes="(max-width: 430px) 50vw, 215px"
+                        className={`object-cover transition duration-300 ${
+                          canOpenPost ? 'group-hover:scale-105' : ''
+                        } ${isProcessing || isFailed ? 'opacity-40' : ''}`}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-xs text-zinc-400">
+                        No media
+                      </div>
+                    )}
 
-                  <div className="absolute inset-x-0 bottom-0 p-3">
-                    <p className="truncate text-sm font-semibold text-white">
-                      @{post.profiles?.username ?? 'unknown'}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-xs text-white/85">
-                      {post.caption || 'No caption'}
-                    </p>
-                  </div>
-                </button>
-              ))}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+
+                    {isVideoPost && !isProcessing && !isFailed && (
+                      <div className="absolute right-3 top-3 rounded-full bg-black/55 px-2 py-1 text-[11px] font-medium text-white backdrop-blur">
+                        Video
+                      </div>
+                    )}
+
+                    {isProcessing && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-4 text-center">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        <p className="mt-3 text-sm font-semibold text-white">
+                          Processing...
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-300">
+                          Your video is being prepared
+                        </p>
+                      </div>
+                    )}
+
+                    {isFailed && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/55 px-4 text-center">
+                        <div className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold text-red-200">
+                          Failed
+                        </div>
+                        <p className="mt-3 text-sm font-semibold text-white">
+                          Video failed
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-300">
+                          {post.processing_error || 'Something went wrong'}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="absolute inset-x-0 bottom-0 p-3">
+                      <p className="truncate text-sm font-semibold text-white">
+                        @{post.profiles?.username ?? 'unknown'}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs text-white/85">
+                        {post.caption || 'No caption'}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
 
-        {selectedPostIndex !== null && (
-          <div className="absolute inset-0 z-40 bg-black/90 p-3">
-            <div className="mb-3 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setSelectedPostIndex(null)}
-                className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white backdrop-blur"
-              >
-                Close
-              </button>
-            </div>
+        {selectedPostId !== null &&
+          readyPosts.some((post) => post.id === selectedPostId) && (
+            <div className="absolute inset-0 z-40 bg-black/90 p-3">
+              <div className="mb-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPostId(null)
+                    setActivePostId(null)
+                    hasScrolledToInitialPostRef.current = false
+                    stopAudio()
+                  }}
+                  className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white backdrop-blur"
+                >
+                  Close
+                </button>
+              </div>
 
-            <div
-              ref={overlayScrollRef}
-              className="no-scrollbar h-[calc(100%-56px)] snap-y snap-mandatory overflow-y-auto"
-            >
-              {posts.map((post) => (
-                <div key={post.id} className="snap-start py-2">
-                  <PostCard post={post} />
-                </div>
-              ))}
+              <div
+                ref={overlayScrollRef}
+                className="no-scrollbar h-[calc(100%-56px)] snap-y snap-mandatory overflow-y-auto"
+              >
+                {readyPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    ref={(el) => {
+                      postRefs.current[post.id] = el
+                    }}
+                    className="snap-start py-2"
+                  >
+                    <PostCard
+                      post={post}
+                      user={user}
+                      currentUserId={currentUserId}
+                      onDelete={handleDeletePost}
+                      isActive={activePostId === post.id}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <EditProfilePanel
           open={editOpen}
           profile={profile}
           onClose={() => setEditOpen(false)}
           onSave={async ({ username, fullName, bio, avatarFile }) => {
-            if (!currentUserId) return
+            if (!currentUserId || saveLoading) return
 
-            let avatarUrl: string | null | undefined = undefined
+            setSaveLoading(true)
 
-            if (avatarFile) {
-              avatarUrl = await uploadAvatarImage(currentUserId, avatarFile)
+            try {
+              let avatarUrl: string | null | undefined = undefined
+
+              if (avatarFile) {
+                avatarUrl = await uploadAvatarImage(currentUserId, avatarFile)
+              }
+
+              await updateProfile({
+                userId: currentUserId,
+                username,
+                fullName,
+                bio,
+                avatarUrl,
+              })
+
+              await refreshProfilePage()
+              setEditOpen(false)
+            } finally {
+              setSaveLoading(false)
             }
-
-            await updateProfile({
-              userId: currentUserId,
-              username,
-              fullName,
-              bio,
-              avatarUrl,
-            })
-
-            await refreshProfilePage()
           }}
         />
       </div>

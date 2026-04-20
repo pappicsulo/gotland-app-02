@@ -11,6 +11,8 @@ type TopBarProps = {
   onEmailLogin: () => void
   email: string
   onEmailChange: (value: string) => void
+  authBusy?: boolean
+  createBusy?: boolean
 }
 
 export default function TopBar({
@@ -22,7 +24,11 @@ export default function TopBar({
   onEmailLogin,
   email,
   onEmailChange,
+  authBusy = false,
+  createBusy = false,
 }: TopBarProps) {
+  const disableTopActions = authBusy || createBusy
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-4 pb-8 pt-5">
       <div className="pointer-events-auto flex items-start justify-between gap-3">
@@ -38,7 +44,8 @@ export default function TopBar({
             <button
               type="button"
               onClick={onToggleCreatePanel}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur"
+              disabled={disableTopActions}
+              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
             >
               {showCreatePanel ? 'Close' : 'Post'}
             </button>
@@ -46,9 +53,10 @@ export default function TopBar({
             <button
               type="button"
               onClick={onLogout}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur"
+              disabled={disableTopActions}
+              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
             >
-              Log out
+              {authBusy ? 'Logging out...' : 'Log out'}
             </button>
           </div>
         ) : (
@@ -59,24 +67,27 @@ export default function TopBar({
                 value={email}
                 onChange={(e) => onEmailChange(e.target.value)}
                 placeholder="Email"
-                className="w-[150px] rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-zinc-400 outline-none backdrop-blur"
+                disabled={authBusy}
+                className="w-[150px] rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-zinc-400 outline-none backdrop-blur disabled:opacity-50"
               />
 
               <button
                 type="button"
                 onClick={onEmailLogin}
-                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black"
+                disabled={authBusy}
+                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
               >
-                Email
+                {authBusy ? 'Sending...' : 'Email'}
               </button>
             </div>
 
             <button
               type="button"
               onClick={onGoogleLogin}
-              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black"
+              disabled={authBusy}
+              className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
             >
-              Continue with Google
+              {authBusy ? 'Please wait...' : 'Continue with Google'}
             </button>
           </div>
         )}

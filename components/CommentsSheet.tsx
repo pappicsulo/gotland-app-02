@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import { useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 
-import { supabase } from '@/lib/supabase/client'
-import type { Comment } from '@/types'
+import { useComments } from '@/hooks/useComments'
 
 type CommentsSheetProps = {
   postId: string
@@ -19,78 +19,28 @@ export default function CommentsSheet({
   open,
   onClose,
 }: CommentsSheetProps) {
-  const [comments, setComments] = useState<Comment[]>([])
-  const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
-
-  async function loadComments() {
-    const { data, error } = await supabase
-      .from('comments')
-      .select(`
-        id,
-        created_at,
-        post_id,
-        user_id,
-        content,
-        profiles:profiles!comments_user_id_fkey (
-          username,
-          avatar_url
-        )
-      `)
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error(error)
-      setMessage('Kunde inte hämta kommentarer.')
-      return
-    }
-
-    setComments((data ?? []) as unknown as Comment[])
-  }
+  const {
+    comments,
+    content,
+    loading,
+    submitting,
+    deletingCommentId,
+    message,
+    setContent,
+    loadComments,
+    resetCommentsState,
+    handleSubmitComment,
+    handleDeleteComment,
+  } = useComments(postId)
 
   useEffect(() => {
     if (open) {
-      loadComments()
-    }
-  }, [open, postId])
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setMessage('')
-
-    if (!user) {
-      setMessage('Du måste logga in för att kommentera.')
+      void loadComments()
       return
     }
 
-    if (!content.trim()) {
-      setMessage('Skriv en kommentar först.')
-      return
-    }
-
-    setLoading(true)
-
-    const { error } = await supabase.from('comments').insert([
-      {
-        post_id: postId,
-        user_id: user.id,
-        content: content.trim(),
-      },
-    ])
-
-    setLoading(false)
-
-    if (error) {
-      console.error(error)
-      setMessage('Kunde inte spara kommentaren.')
-      return
-    }
-
-    setContent('')
-    await loadComments()
-  }
+    resetCommentsState()
+  }, [open, postId, loadComments, resetCommentsState])
 
   if (!open) return null
 
@@ -109,7 +59,9 @@ export default function CommentsSheet({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-4">
-          {comments.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-zinc-400">Loading comments...</p>
+          ) : comments.length === 0 ? (
             <p className="text-sm text-zinc-400">No comments yet.</p>
           ) : (
             <div className="flex flex-col gap-4">
@@ -117,15 +69,20 @@ export default function CommentsSheet({
                 const username = comment.profiles?.username ?? 'unknown'
                 const avatarUrl = comment.profiles?.avatar_url ?? null
                 const avatarLetter = username.charAt(0).toUpperCase()
+                const isOwnComment = !!user && user.id === comment.user_id
+                const isDeleting = deletingCommentId === comment.id
 
                 return (
                   <div key={comment.id} className="rounded-2xl bg-white/5 p-3">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10 text-sm font-semibold text-white">
+                      <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10 text-sm font-semibold text-white">
                         {avatarUrl ? (
-                          <img
+                          <Image
                             src={avatarUrl}
                             alt={`${username} avatar`}
+                            width={40}
+                            height={40}
+                            sizes="40px"
                             className="h-full w-full object-cover"
                           />
                         ) : (
@@ -134,9 +91,31 @@ export default function CommentsSheet({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">
-                          @{username}
-                        </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-semibold text-white">
+                            @{username}
+                          </p>
+
+                          {isOwnComment && (
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={async () => {
+                                const confirmed = window.confirm(
+                                  'Do you want to delete this comment?'
+                                )
+
+                                if (!confirmed) return
+
+                                await handleDeleteComment(user, comment.id)
+                              }}
+                              className="text-xs font-medium text-red-300 transition hover:text-red-200 disabled:opacity-50"
+                            >
+                              {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
+
                         <p className="mt-1 text-sm text-zinc-200">
                           {comment.content}
                         </p>
@@ -149,7 +128,13 @@ export default function CommentsSheet({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="border-t border-white/10 p-4">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            await handleSubmitComment(user)
+          }}
+          className="border-t border-white/10 p-4"
+        >
           <div className="flex items-center gap-2">
             <input
               value={content}
@@ -160,10 +145,10 @@ export default function CommentsSheet({
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="rounded-full bg-white px-5 py-3 text-sm font-medium text-black disabled:opacity-50"
             >
-              {loading ? '...' : 'Send'}
+              {submitting ? '...' : 'Send'}
             </button>
           </div>
 

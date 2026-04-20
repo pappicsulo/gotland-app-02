@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { supabase } from '@/lib/supabase/client'
 import type { Post } from '@/types'
@@ -25,6 +25,7 @@ type UseProfileReturn = {
   posts: Post[]
   loading: boolean
   message: string
+  setMessage: React.Dispatch<React.SetStateAction<string>>
   currentUserId: string | null
   isOwnProfile: boolean
   isFollowing: boolean
@@ -51,77 +52,130 @@ export function useProfile(profileId: string): UseProfileReturn {
   const refreshProfilePage = useCallback(async () => {
     if (!profileId) return
 
-    setLoading(true)
-    setMessage('')
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    const signedInUserId = user?.id ?? null
-    setCurrentUserId(signedInUserId)
-    setIsOwnProfile(signedInUserId === profileId)
-
-    // 🔥 UPDATED: include bio
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, username, full_name, avatar_url, bio')
-      .eq('id', profileId)
-      .maybeSingle()
-
-    if (profileError) {
-      console.error(profileError)
-      setMessage('Could not load profile.')
-      setLoading(false)
-      return
+    const isInitialLoad = profile === null
+    if (isInitialLoad) {
+      setLoading(true)
     }
 
-    setProfile(profileData as ProfileData)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    const { data: postData, error: postError } = await supabase
-      .from('posts')
-      .select(`
-        id,
-        image_url,
-        caption,
-        created_at,
-        user_id,
-        profiles:profiles!posts_user_id_fkey (
-          username,
-          avatar_url
-        )
-      `)
-      .eq('user_id', profileId)
-      .order('created_at', { ascending: false })
+      const signedInUserId = user?.id ?? null
+      setCurrentUserId(signedInUserId)
+      setIsOwnProfile(signedInUserId === profileId)
 
-    if (postError) {
-      console.error(postError)
-      setMessage('Could not load user posts.')
-      setLoading(false)
-      return
+      const profileQuery = supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_url, bio')
+        .eq('id', profileId)
+        .maybeSingle()
+
+      const postsQuery = supabase
+        .from('posts')
+        .select(`
+          id,
+          media_type,
+          image_url,
+          video_url,
+          video_duration,
+          caption,
+          created_at,
+          user_id,
+          audio_url,
+          audio_start,
+          audio_duration,
+          upload_status,
+          processing_error,
+          source_video_url,
+          profiles:profiles!posts_user_id_fkey (
+            username,
+            avatar_url
+          )
+        `)
+        .eq('user_id', profileId)
+        .order('created_at', { ascending: false })
+
+      const followerCountQuery = getFollowerCount(profileId)
+      const followingCountQuery = getFollowingCount(profileId)
+
+      const followStateQuery =
+        signedInUserId && signedInUserId !== profileId
+          ? isFollowingUser(signedInUserId, profileId)
+          : Promise.resolve(false)
+
+      const [
+        profileResult,
+        postsResult,
+        followers,
+        following,
+        followState,
+      ] = await Promise.all([
+        profileQuery,
+        postsQuery,
+        followerCountQuery,
+        followingCountQuery,
+        followStateQuery,
+      ])
+
+      if (profileResult.error) {
+        console.error(profileResult.error)
+        setMessage('Could not load profile.')
+        setProfile(null)
+        setPosts([])
+        setFollowerCount(0)
+        setFollowingCount(0)
+        setIsFollowing(false)
+        return
+      }
+
+      if (postsResult.error) {
+        console.error(postsResult.error)
+        setMessage('Could not load user posts.')
+        setProfile(profileResult.data as ProfileData)
+        setPosts([])
+        setFollowerCount(followers)
+        setFollowingCount(following)
+        setIsFollowing(followState)
+        return
+      }
+
+      setProfile(profileResult.data as ProfileData)
+      setPosts((postsResult.data ?? []) as unknown as Post[])
+      setFollowerCount(followers)
+      setFollowingCount(following)
+      setIsFollowing(followState)
+    } catch (error) {
+      console.error(error)
+      setMessage('Something went wrong while loading the profile.')
+    } finally {
+      if (isInitialLoad) {
+        setLoading(false)
+      }
     }
-
-    setPosts((postData ?? []) as unknown as Post[])
-
-    const followers = await getFollowerCount(profileId)
-    const following = await getFollowingCount(profileId)
-
-    setFollowerCount(followers)
-    setFollowingCount(following)
-
-    if (signedInUserId && signedInUserId !== profileId) {
-      const followingState = await isFollowingUser(signedInUserId, profileId)
-      setIsFollowing(followingState)
-    } else {
-      setIsFollowing(false)
-    }
-
-    setLoading(false)
-  }, [profileId])
+  }, [profileId, profile])
 
   useEffect(() => {
-    refreshProfilePage()
+    void refreshProfilePage()
   }, [refreshProfilePage])
+
+  const hasProcessingPosts = useMemo(
+    () => posts.some((post) => post.upload_status === 'processing'),
+    [posts]
+  )
+
+  useEffect(() => {
+    if (!hasProcessingPosts) return
+
+    const intervalId = window.setInterval(() => {
+      void refreshProfilePage()
+    }, 3000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [hasProcessingPosts, refreshProfilePage])
 
   const handleToggleFollow = useCallback(async () => {
     if (!currentUserId || !profileId || currentUserId === profileId) return
@@ -157,6 +211,7 @@ export function useProfile(profileId: string): UseProfileReturn {
     posts,
     loading,
     message,
+    setMessage,
     currentUserId,
     isOwnProfile,
     isFollowing,

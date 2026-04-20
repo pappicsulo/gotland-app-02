@@ -1,13 +1,24 @@
 import { supabase } from '@/lib/supabase/client'
 
-export async function getAllLikes() {
-  const { data, error } = await supabase.from('likes').select('post_id')
+export async function getLikeCountsForPosts(postIds: string[]) {
+  if (postIds.length === 0) {
+    return {}
+  }
+
+  const { data, error } = await supabase
+    .from('likes')
+    .select('post_id')
+    .in('post_id', postIds)
 
   if (error) {
     throw error
   }
 
   const counts: Record<string, number> = {}
+
+  for (const postId of postIds) {
+    counts[postId] = 0
+  }
 
   for (const like of data ?? []) {
     counts[like.post_id] = (counts[like.post_id] || 0) + 1
@@ -16,11 +27,17 @@ export async function getAllLikes() {
   return counts
 }
 
-export async function getUserLikedPostIds(userId: string) {
-  const { data, error } = await supabase
+export async function getUserLikedPostIds(userId: string, postIds?: string[]) {
+  let query = supabase
     .from('likes')
     .select('post_id')
     .eq('user_id', userId)
+
+  if (postIds && postIds.length > 0) {
+    query = query.in('post_id', postIds)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     throw error
