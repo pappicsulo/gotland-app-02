@@ -79,6 +79,7 @@ export function useProfile(profileId: string): UseProfileReturn {
           media_type,
           image_url,
           video_url,
+          video_thumbnail_url,
           video_duration,
           caption,
           created_at,

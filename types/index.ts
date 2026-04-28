@@ -12,6 +12,7 @@ export type Post = {
   media_type: 'image' | 'video'
   image_url: string | null
   video_url: string | null
+  video_thumbnail_url: string | null
   video_duration: number | null
   caption: string | null
   created_at: string

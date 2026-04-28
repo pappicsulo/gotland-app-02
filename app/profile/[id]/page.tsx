@@ -82,7 +82,8 @@ export default function ProfilePage() {
   async function handleDeletePost(
     postId: string,
     imageUrl?: string | null,
-    videoUrl?: string | null
+    videoUrl?: string | null,
+    videoThumbnailUrl?: string | null
   ) {
     if (!currentUserId || deleteLoading) return
 
@@ -94,6 +95,7 @@ export default function ProfilePage() {
         userId: currentUserId,
         imageUrl,
         videoUrl,
+        videoThumbnailUrl,
       })
 
       const remainingReadyPosts = readyPosts.filter((post) => post.id !== postId)
@@ -337,15 +339,25 @@ export default function ProfilePage() {
                     }`}
                   >
                     {isVideoPost ? (
-                      <video
-                        src={post.video_url ?? undefined}
-                        className={`h-full w-full object-cover ${
-                          isProcessing || isFailed ? 'opacity-40' : ''
-                        }`}
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
+                      post.video_thumbnail_url ? (
+                        <Image
+                          src={post.video_thumbnail_url}
+                          alt={post.caption || 'Video thumbnail'}
+                          fill
+                          sizes="(max-width: 430px) 50vw, 215px"
+                          className={`object-cover transition duration-300 ${
+                            canOpenPost ? 'group-hover:scale-105' : ''
+                          } ${isProcessing || isFailed ? 'opacity-40' : ''}`}
+                        />
+                      ) : (
+                        <div
+                          className={`flex h-full w-full items-center justify-center bg-zinc-800 text-xs text-zinc-400 ${
+                            isProcessing || isFailed ? 'opacity-40' : ''
+                          }`}
+                        >
+                          Video
+                        </div>
+                      )
                     ) : post.image_url ? (
                       <Image
                         src={post.image_url}

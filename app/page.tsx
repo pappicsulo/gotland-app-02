@@ -1,16 +1,21 @@
+// ===== app/page.tsx =====
+
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { supabase } from '@/lib/supabase/client'
 import { useFeed } from '@/hooks/useFeed'
 import { useAuthUser } from '@/hooks/useAuthUser'
+import { useCreatePost } from '@/hooks/useCreatePost'
+import type { MusicTrack } from '@/lib/musicTracks'
 
 import TopBar from '@/components/TopBar'
 import CreatePostPanel from '@/components/CreatePostPanel'
+import UserSearchPanel from '@/components/UserSearchPanel'
 import PostCard from '@/components/PostCard'
 import MobileShell from '@/components/MobileShell'
+import Toast from '@/components/Toast'
 
 function getAuthRedirectUrl() {
   if (typeof window !== 'undefined') {
@@ -21,126 +26,172 @@ function getAuthRedirectUrl() {
 }
 
 export default function Home() {
-  const router = useRouter()
   const { user, authLoading } = useAuthUser()
 
   const [showCreatePanel, setShowCreatePanel] = useState(false)
+  const [showSearchPanel, setShowSearchPanel] = useState(false)
   const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null)
   const [caption, setCaption] = useState('')
   const [email, setEmail] = useState('')
   const [activePostId, setActivePostId] = useState<string | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
 
-  const observerRef = useRef<IntersectionObserver | null>(null)
+  const feedScrollRef = useRef<HTMLDivElement | null>(null)
   const postRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     posts,
     likeCounts,
     likedPostIds,
-    loading,
-    message,
-    uploadStatus,
-    setMessage,
+    message: feedMessage,
+    setMessage: setFeedMessage,
+    upsertPost,
     refreshAll,
-    handleCreatePost,
     handleLike,
   } = useFeed()
 
-  useEffect(() => {
-    if (authLoading) return
-    void refreshAll(user?.id)
-  }, [authLoading, user?.id, refreshAll])
+  const {
+    loading: createLoading,
+    message: createMessage,
+    uploadStatus,
+    setMessage: setCreateMessage,
+    handleCreatePost,
+  } = useCreatePost({
+    onPostCreated: (post) => {
+      upsertPost(post)
+    },
+    onPostUpdated: (post) => {
+      upsertPost(post)
+    },
+  })
 
-  useEffect(() => {
-    if (!message) return
-
-    const timeoutId = window.setTimeout(() => {
-      setMessage('')
-    }, 3500)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [message, setMessage])
+  const visibleMessage = createMessage || feedMessage
 
   const readyPosts = useMemo(
     () => posts.filter((post) => post.upload_status === 'ready'),
     [posts]
   )
 
-  const visiblePostIds = useMemo(
-    () => readyPosts.map((post) => post.id),
-    [readyPosts]
-  )
+  const updateActivePostFromScroll = useCallback(() => {
+    const container = feedScrollRef.current
+    if (!container || readyPosts.length === 0) return
 
-  // Safe fallback:
-  // If no post is active yet, make the first ready post active immediately.
-  useEffect(() => {
-    if (showCreatePanel) return
-    if (readyPosts.length === 0) return
+    const containerRect = container.getBoundingClientRect()
+    const containerCenter = containerRect.top + containerRect.height / 2
 
-    setActivePostId((prev) => prev ?? readyPosts[0].id)
-  }, [readyPosts, showCreatePanel])
+    let closestPostId: string | null = null
+    let closestDistance = Number.POSITIVE_INFINITY
 
-  useEffect(() => {
-    if (showCreatePanel) {
-      setActivePostId(null)
-      observerRef.current?.disconnect()
-      return
-    }
+    for (const post of readyPosts) {
+      const el = postRefs.current[post.id]
+      if (!el) continue
 
-    if (visiblePostIds.length === 0) {
-      setActivePostId(null)
-      observerRef.current?.disconnect()
-      return
-    }
+      const rect = el.getBoundingClientRect()
+      const postCenter = rect.top + rect.height / 2
+      const distance = Math.abs(postCenter - containerCenter)
 
-    observerRef.current?.disconnect()
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        const visibleEntries = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-
-        if (visibleEntries.length === 0) return
-
-        const topEntry = visibleEntries[0]
-        const postId = topEntry.target.getAttribute('data-post-id')
-
-        if (postId) {
-          setActivePostId((prev) => (prev === postId ? prev : postId))
-        }
-      },
-      {
-        root: null,
-        rootMargin: '-10% 0px -10% 0px',
-        threshold: [0.55, 0.7, 0.85],
-      }
-    )
-
-    for (const postId of visiblePostIds) {
-      const el = postRefs.current[postId]
-      if (el) {
-        observerRef.current.observe(el)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestPostId = post.id
       }
     }
+
+    if (closestPostId) {
+      setActivePostId((prev) => (prev === closestPostId ? prev : closestPostId))
+    }
+  }, [readyPosts])
+
+  const handleFeedScroll = useCallback(() => {
+  if (scrollTimeoutRef.current) {
+    clearTimeout(scrollTimeoutRef.current)
+  }
+
+  scrollTimeoutRef.current = setTimeout(() => {
+    updateActivePostFromScroll()
+  }, 90)
+
+}, [updateActivePostFromScroll])
+  useEffect(() => {
+    if (authLoading) return
+    void refreshAll(user?.id)
+  }, [authLoading, user?.id, refreshAll])
+
+  useEffect(() => {
+    if (!visibleMessage) return
+
+    const timeoutId = window.setTimeout(() => {
+      setFeedMessage('')
+      setCreateMessage('')
+    }, 3500)
 
     return () => {
-      observerRef.current?.disconnect()
+      window.clearTimeout(timeoutId)
     }
-  }, [visiblePostIds, showCreatePanel])
+  }, [visibleMessage, setFeedMessage, setCreateMessage])
+
+  useEffect(() => {
+    if (showCreatePanel || showSearchPanel) {
+      setActivePostId(null)
+      return
+    }
+
+    if (readyPosts.length === 0) {
+      setActivePostId(null)
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      updateActivePostFromScroll()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [readyPosts, showCreatePanel, showSearchPanel, updateActivePostFromScroll])
+
+  useEffect(() => {
+    return () => {
+       if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  function clearMessages() {
+    setFeedMessage('')
+    setCreateMessage('')
+  }
 
   function handleToggleCreatePanel() {
-    setMessage('')
+    clearMessages()
 
     setShowCreatePanel((prev) => {
       const next = !prev
 
+      if (next) {
+        setShowSearchPanel(false)
+      }
+
       if (!next) {
         setCaption('')
         setMediaFile(null)
+        setSelectedTrack(null)
+      }
+
+      return next
+    })
+  }
+
+  function handleToggleSearchPanel() {
+    clearMessages()
+
+    setShowSearchPanel((prev) => {
+      const next = !prev
+
+      if (next) {
+        setShowCreatePanel(false)
       }
 
       return next
@@ -148,7 +199,7 @@ export default function Home() {
   }
 
   async function handleGoogleLogin() {
-    setMessage('')
+    clearMessages()
     setAuthBusy(true)
 
     try {
@@ -163,7 +214,7 @@ export default function Home() {
 
       if (error) {
         console.error(error)
-        setMessage('Google login failed.')
+        setFeedMessage('Google login failed.')
       }
     } finally {
       setAuthBusy(false)
@@ -171,12 +222,12 @@ export default function Home() {
   }
 
   async function handleEmailLogin() {
-    setMessage('')
+    clearMessages()
 
     const trimmedEmail = email.trim()
 
     if (!trimmedEmail) {
-      setMessage('Enter an email address.')
+      setFeedMessage('Enter an email address.')
       return
     }
 
@@ -194,11 +245,11 @@ export default function Home() {
 
       if (error) {
         console.error(error)
-        setMessage('Email login failed.')
+        setFeedMessage('Email login failed.')
         return
       }
 
-      setMessage('Check your email for your login link.')
+      setFeedMessage('Check your email for your login link.')
       setEmail('')
     } finally {
       setAuthBusy(false)
@@ -206,7 +257,7 @@ export default function Home() {
   }
 
   async function handleLogout() {
-    setMessage('')
+    clearMessages()
     setAuthBusy(true)
 
     try {
@@ -219,48 +270,65 @@ export default function Home() {
   return (
     <MobileShell>
       <div className="relative h-full overflow-hidden bg-black text-white">
+        <Toast message={visibleMessage} show={!!visibleMessage} />
+
         <TopBar
           user={user}
           showCreatePanel={showCreatePanel}
           onToggleCreatePanel={handleToggleCreatePanel}
+          onToggleSearchPanel={handleToggleSearchPanel}
           onLogout={handleLogout}
           onGoogleLogin={handleGoogleLogin}
           onEmailLogin={handleEmailLogin}
           email={email}
           onEmailChange={setEmail}
           authBusy={authBusy}
-          createBusy={loading}
+          createBusy={createLoading}
         />
 
         <CreatePostPanel
           show={showCreatePanel}
-          loading={loading}
-          message={message}
+          loading={createLoading}
+          message={visibleMessage}
           uploadStatus={uploadStatus}
           caption={caption}
           user={user}
           mediaFile={mediaFile}
+          selectedTrack={selectedTrack}
           onCaptionChange={setCaption}
           onFileChange={setMediaFile}
+          onSelectedTrackChange={setSelectedTrack}
           onSubmit={async (e) => {
             e.preventDefault()
 
-            await handleCreatePost(user, mediaFile, caption, () => {
-              setCaption('')
-              setMediaFile(null)
-              setShowCreatePanel(false)
-
-              if (user?.id) {
-                router.push(`/profile/${user.id}`)
+            await handleCreatePost(
+              user,
+              mediaFile,
+              caption,
+              selectedTrack,
+              () => {
+                setCaption('')
+                setMediaFile(null)
+                setSelectedTrack(null)
+                setShowCreatePanel(false)
               }
-            })
+            )
           }}
         />
 
-        {showCreatePanel ? (
+        <UserSearchPanel
+          open={showSearchPanel}
+          onClose={() => setShowSearchPanel(false)}
+        />
+
+        {showCreatePanel || showSearchPanel ? (
           <div className="h-full bg-black" />
         ) : (
-          <div className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll bg-black px-2 py-2">
+          <div
+            ref={feedScrollRef}
+            onScroll={handleFeedScroll}
+            className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll bg-black px-2 py-2"
+          >
             {readyPosts.length === 0 ? (
               <div className="flex h-full items-center justify-center px-6 text-center">
                 <div>
@@ -268,7 +336,6 @@ export default function Home() {
                   <p className="mt-2 text-zinc-400">
                     Follow people or create the first post to build your feed.
                   </p>
-                  {message && <p className="mt-4 text-red-400">{message}</p>}
                 </div>
               </div>
             ) : (

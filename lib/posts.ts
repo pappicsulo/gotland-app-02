@@ -7,6 +7,7 @@ const POST_SELECT = `
   media_type,
   image_url,
   video_url,
+  video_thumbnail_url,
   video_duration,
   caption,
   created_at,
@@ -104,11 +105,37 @@ export async function uploadPostVideo(
   return publicUrlData.publicUrl
 }
 
+export async function uploadVideoThumbnail(
+  userId: string,
+  thumbnailFile: File
+): Promise<string> {
+  const fileName = `${userId}/${Date.now()}-${crypto.randomUUID()}-thumb.jpg`
+
+  const { error: uploadError } = await supabase.storage
+    .from('images')
+    .upload(fileName, thumbnailFile, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: 'image/jpeg',
+    })
+
+  if (uploadError) {
+    throw uploadError
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from('images')
+    .getPublicUrl(fileName)
+
+  return publicUrlData.publicUrl
+}
+
 export async function createPostRecord(params: {
   userId: string
   mediaType: 'image' | 'video'
   imageUrl?: string | null
   videoUrl?: string | null
+  videoThumbnailUrl?: string | null
   videoDuration?: number | null
   caption: string
   audioUrl?: string | null
@@ -118,36 +145,27 @@ export async function createPostRecord(params: {
   processingError?: string | null
   sourceVideoUrl?: string | null
 }): Promise<Post> {
-  const insertPayload =
-    params.mediaType === 'video'
-      ? {
-          user_id: params.userId,
-          media_type: 'video' as const,
-          image_url: null,
-          video_url: params.videoUrl ?? null,
-          video_duration: params.videoDuration ?? null,
-          caption: params.caption.trim() || null,
-          audio_url: null,
-          audio_start: 0,
-          audio_duration: 0,
-          upload_status: params.uploadStatus ?? 'ready',
-          processing_error: params.processingError ?? null,
-          source_video_url: params.sourceVideoUrl ?? null,
-        }
-      : {
-          user_id: params.userId,
-          media_type: 'image' as const,
-          image_url: params.imageUrl ?? null,
-          video_url: null,
-          video_duration: null,
-          caption: params.caption.trim() || null,
-          audio_url: params.audioUrl ?? null,
-          audio_start: params.audioStart ?? 0,
-          audio_duration: params.audioDuration ?? 10,
-          upload_status: params.uploadStatus ?? 'ready',
-          processing_error: params.processingError ?? null,
-          source_video_url: null,
-        }
+  const insertPayload = {
+    user_id: params.userId,
+    media_type: params.mediaType,
+    image_url: params.mediaType === 'image' ? params.imageUrl ?? null : null,
+    video_url: params.mediaType === 'video' ? params.videoUrl ?? null : null,
+    video_thumbnail_url:
+      params.mediaType === 'video' ? params.videoThumbnailUrl ?? null : null,
+    video_duration:
+      params.mediaType === 'video' ? params.videoDuration ?? null : null,
+    caption: params.caption.trim() || null,
+
+    // ✅ Music now works for both image posts and video posts
+    audio_url: params.audioUrl ?? null,
+    audio_start: params.audioStart ?? 0,
+    audio_duration: params.audioDuration ?? 10,
+
+    upload_status: params.uploadStatus ?? 'ready',
+    processing_error: params.processingError ?? null,
+    source_video_url:
+      params.mediaType === 'video' ? params.sourceVideoUrl ?? null : null,
+  }
 
   const { data, error } = await supabase
     .from('posts')
@@ -169,6 +187,7 @@ export async function updatePostProcessingState(params: {
   processingError?: string | null
   sourceVideoUrl?: string | null
   videoUrl?: string | null
+  videoThumbnailUrl?: string | null
   videoDuration?: number | null
 }): Promise<Post> {
   const updatePayload = {
@@ -177,6 +196,10 @@ export async function updatePostProcessingState(params: {
     source_video_url:
       params.sourceVideoUrl === undefined ? undefined : params.sourceVideoUrl,
     video_url: params.videoUrl === undefined ? undefined : params.videoUrl,
+    video_thumbnail_url:
+      params.videoThumbnailUrl === undefined
+        ? undefined
+        : params.videoThumbnailUrl,
     video_duration:
       params.videoDuration === undefined ? undefined : params.videoDuration,
   }
@@ -250,6 +273,7 @@ export async function deletePostRecord(params: {
   userId: string
   imageUrl?: string | null
   videoUrl?: string | null
+  videoThumbnailUrl?: string | null
 }) {
   const { data: deletedPost, error: deleteError } = await supabase
     .from('posts')
@@ -293,6 +317,26 @@ export async function deletePostRecord(params: {
 
       if (storageError) {
         console.error('Could not delete post video from storage:', storageError)
+      }
+    }
+  }
+
+  if (params.videoThumbnailUrl) {
+    const storagePath = getStoragePathFromPublicUrl(
+      params.videoThumbnailUrl,
+      'images'
+    )
+
+    if (storagePath) {
+      const { error: storageError } = await supabase.storage
+        .from('images')
+        .remove([storagePath])
+
+      if (storageError) {
+        console.error(
+          'Could not delete video thumbnail from storage:',
+          storageError
+        )
       }
     }
   }

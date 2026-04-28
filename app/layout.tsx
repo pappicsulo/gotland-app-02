@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Gotland App',
+  title: 'gotly',
   description: 'A content-driven social app built with Next.js and Supabase.',
 }
 

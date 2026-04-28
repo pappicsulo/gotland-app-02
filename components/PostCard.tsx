@@ -1,3 +1,5 @@
+// ===== PostCard.tsx =====
+
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -89,25 +91,16 @@ export default function PostCard({
   }
 
   useEffect(() => {
-    if (!isReady) {
-      stopAudio()
-      return
-    }
+  if (!isReady) return
+  if (!isActive) return
 
-    if (hasVideo) {
-      stopAudio()
-      return
-    }
+  if (!audioUrl) {
+    stopAudio()
+    return
+  }
 
-    if (!isActive || !audioUrl) return
-
-    void playAudioSegment(audioUrl, audioStart, audioDuration)
-
-    return () => {
-      stopAudio()
-    }
-  }, [isActive, isReady, hasVideo, audioUrl, audioStart, audioDuration])
-
+  void playAudioSegment(audioUrl, audioStart, audioDuration)
+}, [isActive, isReady, audioUrl, audioStart, audioDuration])
   useEffect(() => {
     if (!isReady || !hasVideo || !videoRef.current) return
 
@@ -202,6 +195,12 @@ export default function PostCard({
             <p className="mt-2 text-sm leading-6 text-white/90 drop-shadow-sm">
               {post.caption || 'No caption'}
             </p>
+
+            {audioUrl && (
+              <p className="mt-2 truncate text-xs text-white/75">
+                ♪ Music added
+              </p>
+            )}
 
             {isOwnPost && isReady && (onEdit || (onDelete && !hideDelete)) && (
               <div className="mt-3 flex items-center gap-4 text-sm">
