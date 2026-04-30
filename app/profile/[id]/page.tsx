@@ -471,31 +471,52 @@ export default function ProfilePage() {
           profile={profile}
           onClose={() => setEditOpen(false)}
           onSave={async ({ username, fullName, bio, avatarFile }) => {
-            if (!currentUserId || saveLoading) return
+  alert('Save clicked')
 
-            setSaveLoading(true)
+  if (!currentUserId) {
+    alert('No currentUserId found')
+    return
+  }
 
-            try {
-              let avatarUrl: string | null | undefined = undefined
+  if (saveLoading) {
+    alert('Already saving')
+    return
+  }
 
-              if (avatarFile) {
-                avatarUrl = await uploadAvatarImage(currentUserId, avatarFile)
-              }
+  setSaveLoading(true)
 
-              await updateProfile({
-                userId: currentUserId,
-                username,
-                fullName,
-                bio,
-                avatarUrl,
-              })
+  try {
+    alert(`Updating profile for user: ${currentUserId}`)
 
-              await refreshProfilePage()
-              setEditOpen(false)
-            } finally {
-              setSaveLoading(false)
-            }
-          }}
+    let avatarUrl: string | null | undefined = undefined
+
+    if (avatarFile) {
+      alert('Uploading avatar...')
+      avatarUrl = await uploadAvatarImage(currentUserId, avatarFile)
+      alert('Avatar uploaded')
+    }
+
+    alert('Updating profile row...')
+
+    await updateProfile({
+      userId: currentUserId,
+      username,
+      fullName,
+      bio,
+      avatarUrl,
+    })
+
+    alert('Profile update success')
+
+    await refreshProfilePage()
+    setEditOpen(false)
+  } catch (error: any) {
+    console.error(error)
+    alert(error?.message || JSON.stringify(error) || 'Unknown save error')
+  } finally {
+    setSaveLoading(false)
+  }
+}}
         />
       </div>
     </MobileShell>
