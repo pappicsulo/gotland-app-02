@@ -24,33 +24,20 @@ export async function updateProfile(params: {
     updateData.avatar_url = params.avatarUrl
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update(updateData)
     .eq('id', params.userId)
+    .select('id, username, full_name, bio, avatar_url')
+    .single()
 
   if (error) {
     throw error
   }
-}
 
-export async function uploadAvatarImage(userId: string, file: File) {
-  const fileExt = file.name.split('.').pop() || 'jpg'
-  const filePath = `${userId}/${Date.now()}-${crypto.randomUUID()}.${fileExt}`
-
-  const { error: uploadError } = await supabase.storage
-    .from('avatars')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: file.type,
-    })
-
-  if (uploadError) {
-    throw uploadError
+  if (!data) {
+    throw new Error('Profile update did not save. Supabase RLS may be blocking this user.')
   }
 
-  const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-
-  return data.publicUrl
+  return data
 }
