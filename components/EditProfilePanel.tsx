@@ -94,7 +94,7 @@ export default function EditProfilePanel({
       ) {
         setError('Username is already taken.')
       } else {
-        setError('Could not update profile.')
+        setError(err?.message || JSON.stringify(err) || 'Could not update profile.')
       }
     } finally {
       setLoading(false)
