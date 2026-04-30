@@ -471,32 +471,16 @@ export default function ProfilePage() {
           profile={profile}
           onClose={() => setEditOpen(false)}
           onSave={async ({ username, fullName, bio, avatarFile }) => {
-  alert('Save clicked')
-
-  if (!currentUserId) {
-    alert('No currentUserId found')
-    return
-  }
-
-  if (saveLoading) {
-    alert('Already saving')
-    return
-  }
+  if (!currentUserId || saveLoading) return
 
   setSaveLoading(true)
 
   try {
-    alert(`Updating profile for user: ${currentUserId}`)
-
     let avatarUrl: string | null | undefined = undefined
 
     if (avatarFile) {
-      alert('Uploading avatar...')
       avatarUrl = await uploadAvatarImage(currentUserId, avatarFile)
-      alert('Avatar uploaded')
     }
-
-    alert('Updating profile row...')
 
     await updateProfile({
       userId: currentUserId,
@@ -506,13 +490,10 @@ export default function ProfilePage() {
       avatarUrl,
     })
 
-    alert('Profile update success')
-
     await refreshProfilePage()
     setEditOpen(false)
-  } catch (error: any) {
+  } catch (error) {
     console.error(error)
-    alert(error?.message || JSON.stringify(error) || 'Unknown save error')
   } finally {
     setSaveLoading(false)
   }
