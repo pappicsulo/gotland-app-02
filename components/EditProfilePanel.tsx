@@ -36,7 +36,7 @@ export default function EditProfilePanel({
     setBio(profile.bio || '')
     setAvatarFile(null)
     setError('')
-  }, [open, profile])
+  }, [open, profile.id])
 
   const previewUrl = useMemo(() => {
     if (avatarFile) {
