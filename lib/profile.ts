@@ -1,3 +1,5 @@
+// ===== profile.ts =====
+
 import { supabase } from '@/lib/supabase/client'
 
 export async function updateProfile(params: {
@@ -36,8 +38,31 @@ export async function updateProfile(params: {
   }
 
   if (!data) {
-    throw new Error('Profile update did not save. Supabase RLS may be blocking this user.')
+    throw new Error(
+      'Profile update did not save. Supabase RLS may be blocking this user.'
+    )
   }
 
   return data
+}
+
+export async function uploadAvatarImage(userId: string, file: File) {
+  const fileExt = file.name.split('.').pop() || 'jpg'
+  const filePath = `${userId}/${Date.now()}-${crypto.randomUUID()}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    })
+
+  if (uploadError) {
+    throw uploadError
+  }
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+
+  return data.publicUrl
 }
