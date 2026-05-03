@@ -25,6 +25,7 @@ type PostCardProps = {
   ) => void
   onEdit?: (postId: string, caption: string) => void
   isActive?: boolean
+  shouldPreload?: boolean
   hideDelete?: boolean
 }
 
@@ -38,11 +39,14 @@ export default function PostCard({
   onDelete,
   onEdit,
   isActive = false,
+  shouldPreload = false,
   hideDelete = false,
 }: PostCardProps) {
   const router = useRouter()
   const [commentsOpen, setCommentsOpen] = useState(false)
+
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const playbackRunRef = useRef(0)
 
   const username = post.profiles?.username ?? 'unknown'
   const avatarLetter = username.charAt(0).toUpperCase()
@@ -91,42 +95,82 @@ export default function PostCard({
   }
 
   useEffect(() => {
-  if (!isReady) return
-  if (!isActive) return
-
-  if (!audioUrl) {
-    stopAudio()
-    return
-  }
-
-  void playAudioSegment(audioUrl, audioStart, audioDuration)
-}, [isActive, isReady, audioUrl, audioStart, audioDuration])
-  useEffect(() => {
-    if (!isReady || !hasVideo || !videoRef.current) return
+    const runId = playbackRunRef.current + 1
+    playbackRunRef.current = runId
 
     const video = videoRef.current
 
-    if (!isActive) {
+    function pauseAndResetVideo() {
+      if (!video) return
+
       video.pause()
-      video.currentTime = 0
-      return
+
+      try {
+        video.currentTime = 0
+      } catch {
+        // Ignore rare browser seek/reset errors.
+      }
     }
 
-    const playPromise = video.play()
+    async function startPlayback() {
+      if (!isReady || !isActive) {
+        pauseAndResetVideo()
+        stopAudio()
+        return
+      }
 
-    if (playPromise) {
-      playPromise.catch((error) => {
-        if (error?.name !== 'AbortError') {
-          console.error('Video play failed:', error)
+      if (hasVideo) {
+        if (!video) {
+          stopAudio()
+          return
         }
-      })
+
+        try {
+          await video.play()
+        } catch (error: any) {
+          if (error?.name !== 'AbortError') {
+            console.error('Video play failed:', error)
+          }
+
+          stopAudio()
+          return
+        }
+
+        if (playbackRunRef.current !== runId) return
+
+        if (audioUrl) {
+          await playAudioSegment(audioUrl, audioStart, audioDuration)
+        } else {
+          stopAudio()
+        }
+
+        return
+      }
+
+      if (audioUrl) {
+        await playAudioSegment(audioUrl, audioStart, audioDuration)
+      } else {
+        stopAudio()
+      }
     }
+
+    void startPlayback()
 
     return () => {
-      video.pause()
-      video.currentTime = 0
+      if (playbackRunRef.current === runId) {
+        pauseAndResetVideo()
+        stopAudio()
+      }
     }
-  }, [isActive, isReady, hasVideo])
+  }, [
+    isActive,
+    isReady,
+    hasVideo,
+    audioUrl,
+    audioStart,
+    audioDuration,
+    post.id,
+  ])
 
   return (
     <section className="relative h-[88svh] overflow-hidden rounded-[28px] bg-black">
@@ -138,7 +182,7 @@ export default function PostCard({
           muted
           loop
           playsInline
-          preload="auto"
+         preload={isActive || shouldPreload ? 'auto' : 'metadata'}
         />
       ) : hasImage ? (
         <Image

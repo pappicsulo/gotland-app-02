@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 
 type TopBarProps = {
+  onToggleNotificationsPanel: () => void
   user: User | null
   showCreatePanel: boolean
   onToggleCreatePanel: () => void
@@ -24,6 +25,7 @@ export default function TopBar({
   showCreatePanel,
   onToggleCreatePanel,
   onToggleSearchPanel,
+  onToggleNotificationsPanel,
   onLogout,
   onGoogleLogin,
   onEmailLogin,
@@ -68,6 +70,15 @@ export default function TopBar({
               className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
             >
               Search
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleNotificationsPanel}
+              disabled={disableTopActions}
+              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+            >
+              Notifications
             </button>
 
             <button

@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { supabase } from '@/lib/supabase/client'
 import { useFeed } from '@/hooks/useFeed'
@@ -13,6 +13,7 @@ import type { MusicTrack } from '@/lib/musicTracks'
 import TopBar from '@/components/TopBar'
 import CreatePostPanel from '@/components/CreatePostPanel'
 import UserSearchPanel from '@/components/UserSearchPanel'
+import NotificationsPanel from '@/components/NotificationsPanel'
 import PostCard from '@/components/PostCard'
 import MobileShell from '@/components/MobileShell'
 import Toast from '@/components/Toast'
@@ -30,6 +31,7 @@ export default function Home() {
 
   const [showCreatePanel, setShowCreatePanel] = useState(false)
   const [showSearchPanel, setShowSearchPanel] = useState(false)
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false)
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null)
   const [caption, setCaption] = useState('')
@@ -39,16 +41,18 @@ export default function Home() {
 
   const feedScrollRef = useRef<HTMLDivElement | null>(null)
   const postRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     posts,
     likeCounts,
     likedPostIds,
+    loading: feedLoading,
+    hasMore,
     message: feedMessage,
     setMessage: setFeedMessage,
     upsertPost,
     refreshAll,
+    loadMorePosts,
     handleLike,
   } = useFeed()
 
@@ -74,45 +78,11 @@ export default function Home() {
     [posts]
   )
 
-  const updateActivePostFromScroll = useCallback(() => {
-    const container = feedScrollRef.current
-    if (!container || readyPosts.length === 0) return
+  const activeIndex = useMemo(
+    () => readyPosts.findIndex((post) => post.id === activePostId),
+    [readyPosts, activePostId]
+  )
 
-    const containerRect = container.getBoundingClientRect()
-    const containerCenter = containerRect.top + containerRect.height / 2
-
-    let closestPostId: string | null = null
-    let closestDistance = Number.POSITIVE_INFINITY
-
-    for (const post of readyPosts) {
-      const el = postRefs.current[post.id]
-      if (!el) continue
-
-      const rect = el.getBoundingClientRect()
-      const postCenter = rect.top + rect.height / 2
-      const distance = Math.abs(postCenter - containerCenter)
-
-      if (distance < closestDistance) {
-        closestDistance = distance
-        closestPostId = post.id
-      }
-    }
-
-    if (closestPostId) {
-      setActivePostId((prev) => (prev === closestPostId ? prev : closestPostId))
-    }
-  }, [readyPosts])
-
-  const handleFeedScroll = useCallback(() => {
-  if (scrollTimeoutRef.current) {
-    clearTimeout(scrollTimeoutRef.current)
-  }
-
-  scrollTimeoutRef.current = setTimeout(() => {
-    updateActivePostFromScroll()
-  }, 90)
-
-}, [updateActivePostFromScroll])
   useEffect(() => {
     if (authLoading) return
     void refreshAll(user?.id)
@@ -132,7 +102,7 @@ export default function Home() {
   }, [visibleMessage, setFeedMessage, setCreateMessage])
 
   useEffect(() => {
-    if (showCreatePanel || showSearchPanel) {
+    if (showCreatePanel || showSearchPanel || showNotificationsPanel) {
       setActivePostId(null)
       return
     }
@@ -142,22 +112,80 @@ export default function Home() {
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      updateActivePostFromScroll()
-    })
+    const container = feedScrollRef.current
+    if (!container) return
 
-    return () => {
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [readyPosts, showCreatePanel, showSearchPanel, updateActivePostFromScroll])
+    const visibleRatios = new Map<string, number>()
 
-  useEffect(() => {
-    return () => {
-       if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const postId = entry.target.getAttribute('data-post-id')
+          if (!postId) continue
+
+          if (entry.isIntersecting) {
+            visibleRatios.set(postId, entry.intersectionRatio)
+          } else {
+            visibleRatios.delete(postId)
+          }
+        }
+
+        let bestPostId: string | null = null
+        let bestRatio = 0
+
+        for (const [postId, ratio] of visibleRatios.entries()) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio
+            bestPostId = postId
+          }
+        }
+
+        if (bestPostId) {
+          setActivePostId((prev) => (prev === bestPostId ? prev : bestPostId))
+        }
+      },
+      {
+        root: container,
+        threshold: [0.35, 0.5, 0.65, 0.8],
+      }
+    )
+
+    for (const post of readyPosts) {
+      const el = postRefs.current[post.id]
+      if (el) {
+        observer.observe(el)
       }
     }
-  }, [])
+
+    return () => {
+      observer.disconnect()
+      visibleRatios.clear()
+    }
+  }, [readyPosts, showCreatePanel, showSearchPanel, showNotificationsPanel])
+
+  useEffect(() => {
+    if (!activePostId) return
+    if (feedLoading || !hasMore) return
+
+    const currentActiveIndex = readyPosts.findIndex(
+      (post) => post.id === activePostId
+    )
+
+    if (currentActiveIndex === -1) return
+
+    const shouldLoadMore = currentActiveIndex >= readyPosts.length - 3
+
+    if (shouldLoadMore) {
+      void loadMorePosts(user?.id)
+    }
+  }, [
+    activePostId,
+    readyPosts,
+    feedLoading,
+    hasMore,
+    loadMorePosts,
+    user?.id,
+  ])
 
   function clearMessages() {
     setFeedMessage('')
@@ -172,6 +200,7 @@ export default function Home() {
 
       if (next) {
         setShowSearchPanel(false)
+        setShowNotificationsPanel(false)
       }
 
       if (!next) {
@@ -192,6 +221,22 @@ export default function Home() {
 
       if (next) {
         setShowCreatePanel(false)
+        setShowNotificationsPanel(false)
+      }
+
+      return next
+    })
+  }
+
+  function handleToggleNotificationsPanel() {
+    clearMessages()
+
+    setShowNotificationsPanel((prev) => {
+      const next = !prev
+
+      if (next) {
+        setShowCreatePanel(false)
+        setShowSearchPanel(false)
       }
 
       return next
@@ -277,6 +322,7 @@ export default function Home() {
           showCreatePanel={showCreatePanel}
           onToggleCreatePanel={handleToggleCreatePanel}
           onToggleSearchPanel={handleToggleSearchPanel}
+          onToggleNotificationsPanel={handleToggleNotificationsPanel}
           onLogout={handleLogout}
           onGoogleLogin={handleGoogleLogin}
           onEmailLogin={handleEmailLogin}
@@ -321,12 +367,17 @@ export default function Home() {
           onClose={() => setShowSearchPanel(false)}
         />
 
-        {showCreatePanel || showSearchPanel ? (
+        <NotificationsPanel
+          userId={user?.id ?? null}
+          open={showNotificationsPanel}
+          onClose={() => setShowNotificationsPanel(false)}
+        />
+
+        {showCreatePanel || showSearchPanel || showNotificationsPanel ? (
           <div className="h-full bg-black" />
         ) : (
           <div
             ref={feedScrollRef}
-            onScroll={handleFeedScroll}
             className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll bg-black px-2 py-2"
           >
             {readyPosts.length === 0 ? (
@@ -339,26 +390,45 @@ export default function Home() {
                 </div>
               </div>
             ) : (
-              readyPosts.map((post) => (
-                <div
-                  key={post.id}
-                  data-post-id={post.id}
-                  ref={(el) => {
-                    postRefs.current[post.id] = el
-                  }}
-                  className="snap-center py-3"
-                >
-                  <PostCard
-                    post={post}
-                    user={user}
-                    currentUserId={user?.id ?? null}
-                    isLiked={likedPostIds.has(post.id)}
-                    likeCount={likeCounts[post.id] || 0}
-                    onLike={(postId) => handleLike(user, postId)}
-                    isActive={activePostId === post.id}
-                  />
-                </div>
-              ))
+              <>
+                {readyPosts.map((post, index) => {
+                  const shouldPreload = index === activeIndex + 1
+
+                  return (
+                    <div
+                      key={post.id}
+                      data-post-id={post.id}
+                      ref={(el) => {
+                        postRefs.current[post.id] = el
+                      }}
+                      className="snap-center py-3"
+                    >
+                      <PostCard
+                        post={post}
+                        user={user}
+                        currentUserId={user?.id ?? null}
+                        isLiked={likedPostIds.has(post.id)}
+                        likeCount={likeCounts[post.id] || 0}
+                        onLike={(postId) => handleLike(user, postId)}
+                        isActive={activePostId === post.id}
+                        shouldPreload={shouldPreload}
+                      />
+                    </div>
+                  )
+                })}
+
+                {feedLoading && hasMore && (
+                  <div className="flex h-20 items-center justify-center text-sm text-zinc-500">
+                    Loading more...
+                  </div>
+                )}
+
+                {!hasMore && readyPosts.length > 0 && (
+                  <div className="flex h-20 items-center justify-center text-xs text-zinc-600">
+                    You are all caught up.
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

@@ -1,3 +1,5 @@
+// ===== posts.ts =====
+
 import { supabase } from '@/lib/supabase/client'
 import { getFollowingIds } from '@/lib/follows'
 import type { Post, UploadStatus } from '@/types'
@@ -24,11 +26,24 @@ const POST_SELECT = `
   )
 `
 
-export async function getPosts(currentUserId?: string): Promise<Post[]> {
+export async function getPosts(
+  currentUserId?: string,
+  options: {
+    limit?: number
+    offset?: number
+  } = {}
+): Promise<Post[]> {
+  const limit = options.limit ?? 8
+  const offset = options.offset ?? 0
+
+  const from = offset
+  const to = offset + limit - 1
+
   const { data, error } = await supabase
     .from('posts')
     .select(POST_SELECT)
     .order('created_at', { ascending: false })
+    .range(from, to)
 
   if (error) {
     throw error
@@ -83,27 +98,30 @@ export async function uploadPostVideo(
   userId: string,
   videoFile: File
 ): Promise<string> {
-  const fileExt = 'mp4'
-  const fileName = `${userId}/${Date.now()}-${crypto.randomUUID()}.${fileExt}`
+  const formData = new FormData()
 
-  const { error: uploadError } = await supabase.storage
-    .from('videos')
-    .upload(fileName, videoFile, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: 'video/mp4',
-    })
+  formData.append('file', videoFile)
+  formData.append('userId', userId)
 
-  if (uploadError) {
-    throw uploadError
+  const response = await fetch('/api/r2/upload', {
+    method: 'POST',
+    body: formData,
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result?.error || 'Could not upload video to R2.')
   }
 
-  const { data: publicUrlData } = supabase.storage
-    .from('videos')
-    .getPublicUrl(fileName)
+  if (!result?.url) {
+    throw new Error('R2 upload did not return a video URL.')
+  }
 
-  return publicUrlData.publicUrl
+  return result.url
 }
+
+
 
 export async function uploadVideoThumbnail(
   userId: string,
@@ -156,7 +174,6 @@ export async function createPostRecord(params: {
       params.mediaType === 'video' ? params.videoDuration ?? null : null,
     caption: params.caption.trim() || null,
 
-    // ✅ Music now works for both image posts and video posts
     audio_url: params.audioUrl ?? null,
     audio_start: params.audioStart ?? 0,
     audio_duration: params.audioDuration ?? 10,

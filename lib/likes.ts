@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
+import { createNotification } from '@/lib/notifications'
 
 export async function getLikeCountsForPosts(postIds: string[]) {
   if (postIds.length === 0) {
@@ -57,6 +58,21 @@ export async function likePost(userId: string, postId: string) {
   if (error) {
     throw error
   }
+
+  const { data: post, error: postError } = await supabase
+    .from('posts')
+    .select('user_id')
+    .eq('id', postId)
+    .single()
+
+  if (postError || !post?.user_id) return
+
+  await createNotification({
+    type: 'like',
+    fromUserId: userId,
+    toUserId: post.user_id,
+    postId,
+  })
 }
 
 export async function unlikePost(userId: string, postId: string) {

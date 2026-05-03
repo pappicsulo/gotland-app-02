@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
+import { createNotification } from '@/lib/notifications'
 
 export async function isFollowingUser(
   followerId: string,
@@ -33,6 +34,13 @@ export async function followUser(
   if (error) {
     throw error
   }
+
+  await createNotification({
+    type: 'follow',
+    fromUserId: followerId,
+    toUserId: followingId,
+    postId: null,
+  })
 }
 
 export async function unfollowUser(

@@ -19,17 +19,18 @@ import {
   unlikePost,
 } from '@/lib/likes'
 
+const PAGE_SIZE = 8
+
 type UseFeedReturn = {
   posts: Post[]
   likeCounts: Record<string, number>
   likedPostIds: Set<string>
   loading: boolean
+  hasMore: boolean
   message: string
   setMessage: React.Dispatch<React.SetStateAction<string>>
   upsertPost: (post: Post) => void
-  loadPosts: (currentUserId?: string) => Promise<Post[]>
-  loadLikes: (postIds?: string[]) => Promise<void>
-  loadUserLikes: (currentUserId: string, postIds?: string[]) => Promise<void>
+  loadMorePosts: (currentUserId?: string) => Promise<void>
   refreshAll: (currentUserId?: string) => Promise<void>
   handleLike: (user: User | null, postId: string) => Promise<void>
   handleDeletePost: (
@@ -52,6 +53,8 @@ export function useFeed(): UseFeedReturn {
   const [loading, setLoading] = useState(false)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set())
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
 
   const upsertPost = useCallback((post: Post) => {
     setPosts((prev) => {
@@ -65,62 +68,96 @@ export function useFeed(): UseFeedReturn {
     })
   }, [])
 
-  const loadPosts = useCallback(async (currentUserId?: string): Promise<Post[]> => {
+  const refreshAll = useCallback(async (currentUserId?: string) => {
     setLoading(true)
+    setMessage('')
 
     try {
-      const data = await getPosts(currentUserId)
+      const data = await getPosts(currentUserId, {
+        limit: PAGE_SIZE,
+        offset: 0,
+      })
+
       setPosts(data)
-      return data
+      setOffset(data.length)
+      setHasMore(data.length === PAGE_SIZE)
+
+      const postIds = data.map((post) => post.id)
+
+      const counts = await getLikeCountsForPosts(postIds)
+      setLikeCounts(counts)
+
+      if (currentUserId) {
+        const likedIds = await getUserLikedPostIds(currentUserId, postIds)
+        setLikedPostIds(likedIds)
+      } else {
+        setLikedPostIds(new Set())
+      }
     } catch (error) {
       console.error(error)
       setMessage('Could not load posts.')
-      return []
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const loadLikes = useCallback(
-    async (postIds?: string[]) => {
-      try {
-        const targetPostIds = postIds ?? posts.map((post) => post.id)
-        const counts = await getLikeCountsForPosts(targetPostIds)
-        setLikeCounts(counts)
-      } catch (error) {
-        console.error(error)
-      }
-    },
-    [posts]
-  )
-
-  const loadUserLikes = useCallback(
-    async (currentUserId: string, postIds?: string[]) => {
-      try {
-        const targetPostIds = postIds ?? posts.map((post) => post.id)
-        const likedIds = await getUserLikedPostIds(currentUserId, targetPostIds)
-        setLikedPostIds(likedIds)
-      } catch (error) {
-        console.error(error)
-      }
-    },
-    [posts]
-  )
-
-  const refreshAll = useCallback(
+  const loadMorePosts = useCallback(
     async (currentUserId?: string) => {
-      const loadedPosts = await loadPosts(currentUserId)
-      const loadedPostIds = loadedPosts.map((post) => post.id)
+      if (loading || !hasMore) return
 
-      await loadLikes(loadedPostIds)
+      setLoading(true)
 
-      if (currentUserId) {
-        await loadUserLikes(currentUserId, loadedPostIds)
-      } else {
-        setLikedPostIds(new Set())
+      try {
+        const data = await getPosts(currentUserId, {
+          limit: PAGE_SIZE,
+          offset,
+        })
+
+        if (data.length === 0) {
+          setHasMore(false)
+          return
+        }
+
+        setPosts((prev) => {
+          const existingIds = new Set(prev.map((post) => post.id))
+          const newPosts = data.filter((post) => !existingIds.has(post.id))
+
+          return [...prev, ...newPosts]
+        })
+
+        setOffset((prev) => prev + data.length)
+        setHasMore(data.length === PAGE_SIZE)
+
+        const postIds = data.map((post) => post.id)
+
+        const counts = await getLikeCountsForPosts(postIds)
+
+        setLikeCounts((prev) => ({
+          ...prev,
+          ...counts,
+        }))
+
+        if (currentUserId) {
+          const likedIds = await getUserLikedPostIds(currentUserId, postIds)
+
+          setLikedPostIds((prev) => {
+            const next = new Set(prev)
+
+            for (const postId of likedIds) {
+              next.add(postId)
+            }
+
+            return next
+          })
+        }
+      } catch (error) {
+        console.error(error)
+        setMessage('Could not load more posts.')
+      } finally {
+        setLoading(false)
       }
     },
-    [loadPosts, loadLikes, loadUserLikes]
+    [loading, hasMore, offset]
   )
 
   const handleLike = useCallback(
@@ -304,12 +341,11 @@ export function useFeed(): UseFeedReturn {
     likeCounts,
     likedPostIds,
     loading,
+    hasMore,
     message,
     setMessage,
     upsertPost,
-    loadPosts,
-    loadLikes,
-    loadUserLikes,
+    loadMorePosts,
     refreshAll,
     handleLike,
     handleDeletePost,
