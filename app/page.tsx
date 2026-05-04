@@ -368,10 +368,29 @@ export default function Home() {
         />
 
         <NotificationsPanel
-          userId={user?.id ?? null}
-          open={showNotificationsPanel}
-          onClose={() => setShowNotificationsPanel(false)}
-        />
+  userId={user?.id ?? null}
+  open={showNotificationsPanel}
+  onClose={() => setShowNotificationsPanel(false)}
+  onOpenPost={(postId) => {
+    setShowNotificationsPanel(false)
+
+    setActivePostId(postId)
+
+    setTimeout(() => {
+      const el = postRefs.current[postId]
+      if (el) {
+        el.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }
+    }, 100)
+  }}
+  onOpenProfile={(profileId) => {
+    setShowNotificationsPanel(false)
+    window.location.href = `/profile/${profileId}`
+  }}
+/>
 
         {showCreatePanel || showSearchPanel || showNotificationsPanel ? (
           <div className="h-full bg-black" />
