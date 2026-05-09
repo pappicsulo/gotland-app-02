@@ -13,6 +13,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@supabase/supabase-js": "^2.103.0",
+    "lucide-react": "^1.14.0",
     "next": "16.2.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"

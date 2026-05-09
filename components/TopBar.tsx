@@ -9,6 +9,15 @@
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 
+import {
+  Bell,
+  LogOut,
+  Plus,
+  Search,
+  User as UserIcon,
+  X,
+} from 'lucide-react'
+
 // =========================
 // TYPES
 // =========================
@@ -64,17 +73,25 @@ export default function TopBar({
   }
 
   // =========================
+  // COMMON ICON BUTTON STYLE
+  // =========================
+
+  const iconButtonClass =
+    'flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/15 disabled:opacity-50'
+
+  // =========================
   // RENDER
   // =========================
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black via-black/90 via-black/70 to-transparent px-4 pb-8 pt-5">
+    <div className="pointer-events-none absolute left-2 right-2 top-0 z-30 rounded-t-[28px] border-b border-white/10 bg-black/35 px-4 pb-4 pt-4 backdrop-blur-xl">
       <div className="pointer-events-auto flex items-start justify-between gap-3">
         {/* LEFT SIDE */}
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">
             gotly
           </p>
+
           <h1 className="mt-1 text-2xl font-bold">For You</h1>
         </div>
 
@@ -86,9 +103,10 @@ export default function TopBar({
               type="button"
               onClick={handleOpenMyProfile}
               disabled={disableTopActions}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+              className={iconButtonClass}
+              aria-label="Profile"
             >
-              Profile
+              <UserIcon size={18} strokeWidth={2.2} />
             </button>
 
             {/* SEARCH */}
@@ -96,9 +114,10 @@ export default function TopBar({
               type="button"
               onClick={handleSearchClick}
               disabled={disableTopActions}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+              className={iconButtonClass}
+              aria-label="Search"
             >
-              Search
+              <Search size={18} strokeWidth={2.2} />
             </button>
 
             {/* NOTIFICATIONS */}
@@ -106,9 +125,10 @@ export default function TopBar({
               type="button"
               onClick={onToggleNotificationsPanel}
               disabled={disableTopActions}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+              className={iconButtonClass}
+              aria-label="Notifications"
             >
-              Notifications
+              <Bell size={18} strokeWidth={2.2} />
             </button>
 
             {/* CREATE POST */}
@@ -116,9 +136,14 @@ export default function TopBar({
               type="button"
               onClick={onToggleCreatePanel}
               disabled={disableTopActions}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+              className={iconButtonClass}
+              aria-label={showCreatePanel ? 'Close create panel' : 'Create post'}
             >
-              {showCreatePanel ? 'Close' : 'Post'}
+              {showCreatePanel ? (
+                <X size={18} strokeWidth={2.2} />
+              ) : (
+                <Plus size={18} strokeWidth={2.2} />
+              )}
             </button>
 
             {/* LOGOUT */}
@@ -126,9 +151,10 @@ export default function TopBar({
               type="button"
               onClick={onLogout}
               disabled={disableTopActions}
-              className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
+              className={iconButtonClass}
+              aria-label="Log out"
             >
-              {authBusy ? 'Logging out...' : 'Log out'}
+              <LogOut size={18} strokeWidth={2.2} />
             </button>
           </div>
         ) : (
