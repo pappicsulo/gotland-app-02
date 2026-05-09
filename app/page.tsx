@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useFeed } from '@/hooks/useFeed'
 import { useAuthUser } from '@/hooks/useAuthUser'
 import { useCreatePost } from '@/hooks/useCreatePost'
+import { useHomePanels } from '@/hooks/useHomePanels'
 import type { MusicTrack } from '@/lib/musicTracks'
 
 import TopBar from '@/components/TopBar'
@@ -18,6 +19,10 @@ import PostCard from '@/components/PostCard'
 import MobileShell from '@/components/MobileShell'
 import Toast from '@/components/Toast'
 
+// =========================
+// AUTH HELPERS
+// =========================
+
 function getAuthRedirectUrl() {
   if (typeof window !== 'undefined') {
     return process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
@@ -26,21 +31,66 @@ function getAuthRedirectUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 }
 
+// =========================
+// PAGE COMPONENT
+// =========================
+
 export default function Home() {
+  // =========================
+  // AUTH
+  // =========================
+
   const { user, authLoading } = useAuthUser()
 
-  const [showCreatePanel, setShowCreatePanel] = useState(false)
-  const [showSearchPanel, setShowSearchPanel] = useState(false)
-  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false)
+  // =========================
+  // PANELS
+  // =========================
+
+  const {
+    showCreatePanel,
+    showSearchPanel,
+    showNotificationsPanel,
+
+    toggleCreatePanel,
+    toggleSearchPanel,
+    toggleNotificationsPanel,
+
+    closeCreatePanel,
+    closeSearchPanel,
+    closeNotificationsPanel,
+  } = useHomePanels()
+
+  // =========================
+  // CREATE POST STATE
+  // =========================
+
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null)
   const [caption, setCaption] = useState('')
+
+  // =========================
+  // LOGIN STATE
+  // =========================
+
   const [email, setEmail] = useState('')
-  const [activePostId, setActivePostId] = useState<string | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
+
+  // =========================
+  // FEED / PLAYBACK STATE
+  // =========================
+
+  const [activePostId, setActivePostId] = useState<string | null>(null)
+
+  // =========================
+  // REFS
+  // =========================
 
   const feedScrollRef = useRef<HTMLDivElement | null>(null)
   const postRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // =========================
+  // FEED DATA / ACTIONS
+  // =========================
 
   const {
     posts,
@@ -55,6 +105,10 @@ export default function Home() {
     loadMorePosts,
     handleLike,
   } = useFeed()
+
+  // =========================
+  // CREATE POST DATA / ACTIONS
+  // =========================
 
   const {
     loading: createLoading,
@@ -71,6 +125,10 @@ export default function Home() {
     },
   })
 
+  // =========================
+  // DERIVED VALUES
+  // =========================
+
   const visibleMessage = createMessage || feedMessage
 
   const readyPosts = useMemo(
@@ -83,10 +141,33 @@ export default function Home() {
     [readyPosts, activePostId]
   )
 
+  // =========================
+  // HELPERS
+  // =========================
+
+  function clearMessages() {
+    setFeedMessage('')
+    setCreateMessage('')
+  }
+
+  function resetCreatePostForm() {
+    setCaption('')
+    setMediaFile(null)
+    setSelectedTrack(null)
+  }
+
+  // =========================
+  // EFFECT: LOAD FEED AFTER AUTH
+  // =========================
+
   useEffect(() => {
     if (authLoading) return
     void refreshAll(user?.id)
   }, [authLoading, user?.id, refreshAll])
+
+  // =========================
+  // EFFECT: AUTO-HIDE MESSAGES
+  // =========================
 
   useEffect(() => {
     if (!visibleMessage) return
@@ -100,6 +181,10 @@ export default function Home() {
       window.clearTimeout(timeoutId)
     }
   }, [visibleMessage, setFeedMessage, setCreateMessage])
+
+  // =========================
+  // EFFECT: TRACK ACTIVE POST
+  // =========================
 
   useEffect(() => {
     if (showCreatePanel || showSearchPanel || showNotificationsPanel) {
@@ -152,9 +237,7 @@ export default function Home() {
 
     for (const post of readyPosts) {
       const el = postRefs.current[post.id]
-      if (el) {
-        observer.observe(el)
-      }
+      if (el) observer.observe(el)
     }
 
     return () => {
@@ -162,6 +245,10 @@ export default function Home() {
       visibleRatios.clear()
     }
   }, [readyPosts, showCreatePanel, showSearchPanel, showNotificationsPanel])
+
+  // =========================
+  // EFFECT: LOAD MORE POSTS
+  // =========================
 
   useEffect(() => {
     if (!activePostId) return
@@ -187,61 +274,38 @@ export default function Home() {
     user?.id,
   ])
 
-  function clearMessages() {
-    setFeedMessage('')
-    setCreateMessage('')
-  }
+  // =========================
+  // PANEL HANDLERS
+  // =========================
 
   function handleToggleCreatePanel() {
     clearMessages()
 
-    setShowCreatePanel((prev) => {
-      const next = !prev
+    if (showCreatePanel) {
+      resetCreatePostForm()
+    }
 
-      if (next) {
-        setShowSearchPanel(false)
-        setShowNotificationsPanel(false)
-      }
-
-      if (!next) {
-        setCaption('')
-        setMediaFile(null)
-        setSelectedTrack(null)
-      }
-
-      return next
-    })
+    toggleCreatePanel()
   }
 
   function handleToggleSearchPanel() {
     clearMessages()
-
-    setShowSearchPanel((prev) => {
-      const next = !prev
-
-      if (next) {
-        setShowCreatePanel(false)
-        setShowNotificationsPanel(false)
-      }
-
-      return next
-    })
+    toggleSearchPanel()
   }
 
   function handleToggleNotificationsPanel() {
     clearMessages()
-
-    setShowNotificationsPanel((prev) => {
-      const next = !prev
-
-      if (next) {
-        setShowCreatePanel(false)
-        setShowSearchPanel(false)
-      }
-
-      return next
-    })
+    toggleNotificationsPanel()
   }
+
+  function handleCloseCreatePanel() {
+    resetCreatePostForm()
+    closeCreatePanel()
+  }
+
+  // =========================
+  // AUTH HANDLERS
+  // =========================
 
   async function handleGoogleLogin() {
     clearMessages()
@@ -312,6 +376,10 @@ export default function Home() {
     }
   }
 
+  // =========================
+  // RENDER
+  // =========================
+
   return (
     <MobileShell>
       <div className="relative h-full overflow-hidden bg-black text-white">
@@ -353,10 +421,8 @@ export default function Home() {
               caption,
               selectedTrack,
               () => {
-                setCaption('')
-                setMediaFile(null)
-                setSelectedTrack(null)
-                setShowCreatePanel(false)
+                resetCreatePostForm()
+                closeCreatePanel()
               }
             )
           }}
@@ -364,33 +430,32 @@ export default function Home() {
 
         <UserSearchPanel
           open={showSearchPanel}
-          onClose={() => setShowSearchPanel(false)}
+          onClose={closeSearchPanel}
         />
 
         <NotificationsPanel
-  userId={user?.id ?? null}
-  open={showNotificationsPanel}
-  onClose={() => setShowNotificationsPanel(false)}
-  onOpenPost={(postId) => {
-    setShowNotificationsPanel(false)
+          userId={user?.id ?? null}
+          open={showNotificationsPanel}
+          onClose={closeNotificationsPanel}
+          onOpenPost={(postId) => {
+            closeNotificationsPanel()
+            setActivePostId(postId)
 
-    setActivePostId(postId)
+            window.setTimeout(() => {
+              const el = postRefs.current[postId]
+              if (!el) return
 
-    setTimeout(() => {
-      const el = postRefs.current[postId]
-      if (el) {
-        el.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        })
-      }
-    }, 100)
-  }}
-  onOpenProfile={(profileId) => {
-    setShowNotificationsPanel(false)
-    window.location.href = `/profile/${profileId}`
-  }}
-/>
+              el.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+              })
+            }, 100)
+          }}
+          onOpenProfile={(profileId) => {
+            closeNotificationsPanel()
+            window.location.href = `/profile/${profileId}`
+          }}
+        />
 
         {showCreatePanel || showSearchPanel || showNotificationsPanel ? (
           <div className="h-full bg-black" />
@@ -403,6 +468,7 @@ export default function Home() {
               <div className="flex h-full items-center justify-center px-6 text-center">
                 <div>
                   <p className="text-xl font-semibold">No posts yet</p>
+
                   <p className="mt-2 text-zinc-400">
                     Follow people or create the first post to build your feed.
                   </p>

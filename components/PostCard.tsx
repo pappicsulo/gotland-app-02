@@ -2,14 +2,24 @@
 
 'use client'
 
+// =========================
+// IMPORTS
+// =========================
+
 import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 
 import type { Post } from '@/types'
 import CommentsSheet from '@/components/CommentsSheet'
+import ReportPostButton from '@/components/ReportPostButton'
+import PostMedia from '@/components/PostMedia'
+import PostActions from '@/components/PostActions'
 import { playAudioSegment, stopAudio } from '@/lib/audio'
+
+// =========================
+// TYPES
+// =========================
 
 type PostCardProps = {
   post: Post
@@ -21,13 +31,18 @@ type PostCardProps = {
   onDelete?: (
     postId: string,
     imageUrl?: string | null,
-    videoUrl?: string | null
+    videoUrl?: string | null,
+    videoThumbnailUrl?: string | null
   ) => void
   onEdit?: (postId: string, caption: string) => void
   isActive?: boolean
   shouldPreload?: boolean
   hideDelete?: boolean
 }
+
+// =========================
+// COMPONENT
+// =========================
 
 export default function PostCard({
   post,
@@ -43,10 +58,23 @@ export default function PostCard({
   hideDelete = false,
 }: PostCardProps) {
   const router = useRouter()
+
+  // =========================
+  // STATE
+  // =========================
+
   const [commentsOpen, setCommentsOpen] = useState(false)
+
+  // =========================
+  // REFS
+  // =========================
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playbackRunRef = useRef(0)
+
+  // =========================
+  // DERIVED VALUES
+  // =========================
 
   const username = post.profiles?.username ?? 'unknown'
   const avatarLetter = username.charAt(0).toUpperCase()
@@ -65,7 +93,10 @@ export default function PostCard({
   const isFailed = post.upload_status === 'failed'
 
   const hasVideo = post.media_type === 'video' && !!post.video_url
-  const hasImage = post.media_type === 'image' && !!post.image_url
+
+  // =========================
+  // HANDLERS
+  // =========================
 
   function handleOpenProfile() {
     if (!post.user_id) return
@@ -81,7 +112,12 @@ export default function PostCard({
 
     if (!confirmed) return
 
-    onDelete(post.id, post.image_url, post.video_url)
+    onDelete(
+      post.id,
+      post.image_url,
+      post.video_url,
+      post.video_thumbnail_url
+    )
   }
 
   function handleEditClick() {
@@ -93,6 +129,10 @@ export default function PostCard({
 
     onEdit(post.id, nextCaption)
   }
+
+  // =========================
+  // EFFECT: VIDEO / AUDIO PLAYBACK
+  // =========================
 
   useEffect(() => {
     const runId = playbackRunRef.current + 1
@@ -113,9 +153,18 @@ export default function PostCard({
     }
 
     async function startPlayback() {
-      if (!isReady || !isActive) {
+      if (!isReady) {
         pauseAndResetVideo()
-        stopAudio()
+
+        if (isActive) {
+          stopAudio()
+        }
+
+        return
+      }
+
+      if (!isActive) {
+        pauseAndResetVideo()
         return
       }
 
@@ -139,7 +188,7 @@ export default function PostCard({
         if (playbackRunRef.current !== runId) return
 
         if (audioUrl) {
-          await playAudioSegment(audioUrl, audioStart, audioDuration)
+          await playAudioSegment(audioUrl, audioStart, audioDuration, post.id)
         } else {
           stopAudio()
         }
@@ -148,7 +197,7 @@ export default function PostCard({
       }
 
       if (audioUrl) {
-        await playAudioSegment(audioUrl, audioStart, audioDuration)
+        await playAudioSegment(audioUrl, audioStart, audioDuration, post.id)
       } else {
         stopAudio()
       }
@@ -172,61 +221,62 @@ export default function PostCard({
     post.id,
   ])
 
+  // =========================
+  // RENDER
+  // =========================
+
   return (
     <section className="relative h-[88svh] overflow-hidden rounded-[28px] bg-black">
-      {hasVideo ? (
-        <video
-          ref={videoRef}
-          src={post.video_url ?? undefined}
-          className="h-full w-full object-cover"
-          muted
-          loop
-          playsInline
-         preload={isActive || shouldPreload ? 'auto' : 'metadata'}
-        />
-      ) : hasImage ? (
-        <Image
-          src={post.image_url!}
-          alt={post.caption || 'Post image'}
-          fill
-          sizes="(max-width: 430px) 100vw, 430px"
-          className="object-cover"
-          priority={isActive}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-zinc-900" />
-      )}
+      {/* MEDIA */}
+      <PostMedia
+        mediaType={post.media_type}
+        imageUrl={post.image_url}
+        videoUrl={post.video_url}
+        caption={post.caption}
+        isActive={isActive}
+        shouldPreload={shouldPreload}
+        videoRef={videoRef}
+      />
 
+      {/* OVERLAY GRADIENT */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/85" />
 
+      {/* PROCESSING STATE */}
       {isProcessing && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/45 px-6 text-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+
           <p className="mt-4 text-base font-semibold text-white">
             Processing video...
           </p>
+
           <p className="mt-2 text-sm text-zinc-300">
             You can keep using the app while this finishes.
           </p>
         </div>
       )}
 
+      {/* FAILED STATE */}
       {isFailed && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/55 px-6 text-center">
           <div className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold text-red-200">
             Failed
           </div>
+
           <p className="mt-4 text-base font-semibold text-white">
             Video could not be processed
           </p>
+
           <p className="mt-2 text-sm text-zinc-300">
             {post.processing_error || 'Something went wrong.'}
           </p>
         </div>
       )}
 
+      {/* CONTENT */}
       <div className="absolute inset-x-0 bottom-0 z-20 p-5">
         <div className="flex items-end justify-between gap-4">
+          {/* LEFT SIDE: TEXT + OWNER ACTIONS */}
           <div className="max-w-[70%]">
             <button
               type="button"
@@ -246,9 +296,17 @@ export default function PostCard({
               </p>
             )}
 
-            {isOwnPost && isReady && (onEdit || (onDelete && !hideDelete)) && (
+            {isReady && (
               <div className="mt-3 flex items-center gap-4 text-sm">
-                {onEdit && (
+                {!isOwnPost && (
+                  <ReportPostButton
+                    user={user}
+                    postId={post.id}
+                    reportedUserId={post.user_id}
+                  />
+                )}
+
+                {isOwnPost && onEdit && (
                   <button
                     type="button"
                     onClick={handleEditClick}
@@ -258,7 +316,7 @@ export default function PostCard({
                   </button>
                 )}
 
-                {onDelete && !hideDelete && (
+                {isOwnPost && onDelete && !hideDelete && (
                   <button
                     type="button"
                     onClick={handleDeleteClick}
@@ -283,80 +341,23 @@ export default function PostCard({
             )}
           </div>
 
-          <div className="flex flex-col items-center gap-4 pb-2">
-            <button
-              type="button"
-              onClick={handleOpenProfile}
-              className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-black/25 text-lg font-semibold text-white backdrop-blur-md transition hover:scale-105"
-              aria-label="Open profile"
-            >
-              {avatarUrl ? (
-                <Image
-                  src={avatarUrl}
-                  alt={`${username} avatar`}
-                  width={56}
-                  height={56}
-                  sizes="56px"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span>{avatarLetter}</span>
-              )}
-            </button>
-
-            {isReady ? (
-              <>
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onLike(post.id)}
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-3xl text-white backdrop-blur-md transition hover:scale-110 active:scale-95"
-                    aria-label="Like post"
-                  >
-                    <span
-                      className={`transition-transform duration-200 ${
-                        isLiked ? 'scale-125 text-red-500' : 'scale-100 opacity-85'
-                      }`}
-                    >
-                      {isLiked ? '♥' : '♡'}
-                    </span>
-                  </button>
-
-                  <span className="text-sm font-medium text-white drop-shadow-sm">
-                    {likeCount}
-                  </span>
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setCommentsOpen(true)}
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-black/25 text-2xl text-white backdrop-blur-md transition hover:scale-105"
-                    aria-label="Comments"
-                  >
-                    💬
-                  </button>
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-black/25 text-2xl text-white backdrop-blur-md transition hover:scale-105"
-                    aria-label="Share"
-                  >
-                    ↗
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="rounded-full bg-black/30 px-3 py-2 text-xs text-white/80 backdrop-blur-md">
-                {isProcessing ? 'Working...' : 'Unavailable'}
-              </div>
-            )}
-          </div>
+          {/* RIGHT SIDE: AVATAR + ACTION BUTTONS */}
+          <PostActions
+            avatarUrl={avatarUrl}
+            avatarLetter={avatarLetter}
+            username={username}
+            isReady={isReady}
+            isProcessing={isProcessing}
+            isLiked={isLiked}
+            likeCount={likeCount}
+            onOpenProfile={handleOpenProfile}
+            onLike={() => onLike(post.id)}
+            onOpenComments={() => setCommentsOpen(true)}
+          />
         </div>
       </div>
 
+      {/* COMMENTS */}
       {isReady && (
         <CommentsSheet
           postId={post.id}

@@ -3,6 +3,10 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import type { ProfileData } from '@/hooks/useProfile'
+import {
+  isProtectedDisplayName,
+  isProtectedUsername,
+} from '@/lib/protectedNames'
 
 type Props = {
   open: boolean
@@ -28,20 +32,26 @@ export default function EditProfilePanel({
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [usernameError, setUsernameError] = useState('')
+  const [displayNameError, setDisplayNameError] = useState('')
 
   useEffect(() => {
     if (!open) return
+
     setUsername(profile.username || '')
     setFullName(profile.full_name || '')
     setBio(profile.bio || '')
     setAvatarFile(null)
     setError('')
-  }, [open, profile.id])
+    setUsernameError('')
+    setDisplayNameError('')
+  }, [open, profile.id, profile.username, profile.full_name, profile.bio])
 
   const previewUrl = useMemo(() => {
     if (avatarFile) {
       return URL.createObjectURL(avatarFile)
     }
+
     return profile.avatar_url || null
   }, [avatarFile, profile.avatar_url])
 
@@ -55,33 +65,61 @@ export default function EditProfilePanel({
 
   if (!open) return null
 
+  function validateUsername(value: string) {
+    const normalized = value.trim().toLowerCase()
+
+    if (!normalized) {
+      return 'Username is required.'
+    }
+
+    if (!/^[a-z0-9_]+$/.test(normalized)) {
+      return 'Username can only contain lowercase letters, numbers, and underscores.'
+    }
+
+    if (normalized.length < 3) {
+      return 'Username must be at least 3 characters.'
+    }
+
+    if (isProtectedUsername(normalized)) {
+      return 'This username is not allowed.'
+    }
+
+    return ''
+  }
+
+  function validateDisplayName(value: string) {
+    const trimmed = value.trim()
+
+    if (trimmed && isProtectedDisplayName(trimmed)) {
+      return 'This display name is not allowed.'
+    }
+
+    return ''
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
+    const nextUsernameError = validateUsername(username)
+    const nextDisplayNameError = validateDisplayName(fullName)
+
+    setUsernameError(nextUsernameError)
+    setDisplayNameError(nextDisplayNameError)
+
+    if (nextUsernameError || nextDisplayNameError) {
+      return
+    }
+
     const normalizedUsername = username.trim().toLowerCase()
-
-    if (!normalizedUsername) {
-      setError('Username is required.')
-      return
-    }
-
-    if (!/^[a-z0-9_]+$/.test(normalizedUsername)) {
-      setError('Username can only contain lowercase letters, numbers, and underscores.')
-      return
-    }
-
-    if (normalizedUsername.length < 3) {
-      setError('Username must be at least 3 characters.')
-      return
-    }
+    const trimmedFullName = fullName.trim()
 
     setLoading(true)
 
     try {
       await onSave({
         username: normalizedUsername,
-        fullName,
+        fullName: trimmedFullName,
         bio,
         avatarFile,
       })
@@ -94,7 +132,9 @@ export default function EditProfilePanel({
       ) {
         setError('Username is already taken.')
       } else {
-        setError(err?.message || JSON.stringify(err) || 'Could not update profile.')
+        setError(
+          err?.message || JSON.stringify(err) || 'Could not update profile.'
+        )
       }
     } finally {
       setLoading(false)
@@ -158,19 +198,41 @@ export default function EditProfilePanel({
         <input
           value={username}
           disabled={loading}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            setUsername(value)
+            setUsernameError(validateUsername(value))
+            setError('')
+          }}
           placeholder="username"
-          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
+          className={`w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50 ${
+            usernameError ? 'mb-2 border border-red-500/60' : 'mb-4'
+          }`}
         />
+
+        {usernameError && (
+          <p className="mb-4 text-sm text-red-400">{usernameError}</p>
+        )}
 
         <label className="mb-2 block text-sm text-zinc-300">Full name</label>
         <input
           value={fullName}
           disabled={loading}
-          onChange={(e) => setFullName(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            setFullName(value)
+            setDisplayNameError(validateDisplayName(value))
+            setError('')
+          }}
           placeholder="Full name"
-          className="mb-4 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
+          className={`w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50 ${
+            displayNameError ? 'mb-2 border border-red-500/60' : 'mb-4'
+          }`}
         />
+
+        {displayNameError && (
+          <p className="mb-4 text-sm text-red-400">{displayNameError}</p>
+        )}
 
         <label className="mb-2 block text-sm text-zinc-300">Bio</label>
         <textarea
@@ -183,7 +245,9 @@ export default function EditProfilePanel({
           className="mb-2 w-full rounded-xl bg-zinc-800 p-3 outline-none disabled:opacity-50"
         />
 
-        <p className="mb-4 text-right text-xs text-zinc-500">{bio.length}/160</p>
+        <p className="mb-4 text-right text-xs text-zinc-500">
+          {bio.length}/160
+        </p>
 
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
 
@@ -199,7 +263,7 @@ export default function EditProfilePanel({
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !!usernameError || !!displayNameError}
             className="rounded-full bg-white px-5 py-2 font-medium text-black disabled:opacity-50"
           >
             {loading ? 'Saving...' : 'Save'}

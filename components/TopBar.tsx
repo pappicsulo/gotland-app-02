@@ -2,8 +2,16 @@
 
 'use client'
 
+// =========================
+// IMPORTS
+// =========================
+
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
+
+// =========================
+// TYPES
+// =========================
 
 type TopBarProps = {
   onToggleNotificationsPanel: () => void
@@ -20,6 +28,10 @@ type TopBarProps = {
   createBusy?: boolean
 }
 
+// =========================
+// COMPONENT
+// =========================
+
 export default function TopBar({
   user,
   showCreatePanel,
@@ -35,16 +47,30 @@ export default function TopBar({
   createBusy = false,
 }: TopBarProps) {
   const router = useRouter()
+
   const disableTopActions = authBusy || createBusy
+
+  // =========================
+  // HANDLERS
+  // =========================
 
   function handleOpenMyProfile() {
     if (!user?.id) return
     router.push(`/profile/${user.id}`)
   }
 
+  function handleSearchClick() {
+    onToggleSearchPanel()
+  }
+
+  // =========================
+  // RENDER
+  // =========================
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-4 pb-8 pt-5">
       <div className="pointer-events-auto flex items-start justify-between gap-3">
+        {/* LEFT SIDE */}
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">
             gotly
@@ -52,8 +78,10 @@ export default function TopBar({
           <h1 className="mt-1 text-2xl font-bold">For You</h1>
         </div>
 
+        {/* RIGHT SIDE */}
         {user ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* PROFILE */}
             <button
               type="button"
               onClick={handleOpenMyProfile}
@@ -63,15 +91,17 @@ export default function TopBar({
               Profile
             </button>
 
+            {/* SEARCH */}
             <button
               type="button"
-              onClick={onToggleSearchPanel}
+              onClick={handleSearchClick}
               disabled={disableTopActions}
               className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur disabled:opacity-50"
             >
               Search
             </button>
 
+            {/* NOTIFICATIONS */}
             <button
               type="button"
               onClick={onToggleNotificationsPanel}
@@ -81,6 +111,7 @@ export default function TopBar({
               Notifications
             </button>
 
+            {/* CREATE POST */}
             <button
               type="button"
               onClick={onToggleCreatePanel}
@@ -90,6 +121,7 @@ export default function TopBar({
               {showCreatePanel ? 'Close' : 'Post'}
             </button>
 
+            {/* LOGOUT */}
             <button
               type="button"
               onClick={onLogout}
@@ -101,6 +133,7 @@ export default function TopBar({
           </div>
         ) : (
           <div className="flex flex-col items-end gap-2">
+            {/* EMAIL LOGIN */}
             <div className="flex items-center gap-2">
               <input
                 type="email"
@@ -121,6 +154,7 @@ export default function TopBar({
               </button>
             </div>
 
+            {/* GOOGLE LOGIN */}
             <button
               type="button"
               onClick={onGoogleLogin}

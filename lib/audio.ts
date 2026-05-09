@@ -97,9 +97,12 @@ function fadeIn(audio: HTMLAudioElement) {
 export async function playAudioSegment(
   url: string,
   start: number,
-  duration: number
+  duration: number,
+  playbackId?: string
 ) {
-  const nextKey = `${url}-${start}-${duration}`
+  const nextKey = playbackId
+  ? `${playbackId}-${url}-${start}-${duration}`
+  : `${url}-${start}-${duration}`
 
   if (currentKey === nextKey && currentAudio) {
     return

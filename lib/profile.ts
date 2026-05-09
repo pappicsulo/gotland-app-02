@@ -1,6 +1,8 @@
-// ===== profile.ts =====
-
 import { supabase } from '@/lib/supabase/client'
+import {
+  isProtectedDisplayName,
+  isProtectedUsername,
+} from '@/lib/protectedNames'
 
 export async function updateProfile(params: {
   userId: string
@@ -10,6 +12,15 @@ export async function updateProfile(params: {
   avatarUrl?: string | null
 }) {
   const username = params.username.trim().toLowerCase()
+  const fullName = params.fullName.trim()
+
+  if (isProtectedUsername(username)) {
+    throw new Error('This username is not allowed.')
+  }
+
+  if (fullName && isProtectedDisplayName(fullName)) {
+    throw new Error('This display name is not allowed.')
+  }
 
   const updateData: {
     username: string
@@ -18,7 +29,7 @@ export async function updateProfile(params: {
     avatar_url?: string | null
   } = {
     username,
-    full_name: params.fullName.trim() || null,
+    full_name: fullName || null,
     bio: params.bio.trim() || null,
   }
 

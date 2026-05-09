@@ -1,3 +1,5 @@
+// ===== CommentsSheet.tsx =====
+
 'use client'
 
 import Image from 'next/image'
@@ -5,6 +7,7 @@ import { useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 
 import { useComments } from '@/hooks/useComments'
+import ReportCommentButton from '@/components/ReportCommentButton'
 
 type CommentsSheetProps = {
   postId: string
@@ -46,9 +49,10 @@ export default function CommentsSheet({
 
   return (
     <div className="absolute inset-0 z-50 flex items-end bg-black/50">
-      <div className="flex h-[62%] w-full flex-col rounded-t-[28px] bg-zinc-950 text-white">
+      <div className="relative flex h-[62%] w-full flex-col rounded-t-[28px] bg-zinc-950 text-white">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
           <h3 className="text-lg font-semibold">Comments</h3>
+
           <button
             type="button"
             onClick={onClose}
@@ -96,24 +100,34 @@ export default function CommentsSheet({
                             @{username}
                           </p>
 
-                          {isOwnComment && (
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={async () => {
-                                const confirmed = window.confirm(
-                                  'Do you want to delete this comment?'
-                                )
+                          <div className="flex items-center gap-3">
+                            {!isOwnComment && (
+                              <ReportCommentButton
+                                user={user}
+                                commentId={comment.id}
+                                reportedUserId={comment.user_id}
+                              />
+                            )}
 
-                                if (!confirmed) return
+                            {isOwnComment && (
+                              <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={async () => {
+                                  const confirmed = window.confirm(
+                                    'Do you want to delete this comment?'
+                                  )
 
-                                await handleDeleteComment(user, comment.id)
-                              }}
-                              className="text-xs font-medium text-red-300 transition hover:text-red-200 disabled:opacity-50"
-                            >
-                              {isDeleting ? 'Deleting...' : 'Delete'}
-                            </button>
-                          )}
+                                  if (!confirmed) return
+
+                                  await handleDeleteComment(user, comment.id)
+                                }}
+                                className="text-xs font-medium text-red-300 transition hover:text-red-200 disabled:opacity-50"
+                              >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <p className="mt-1 text-sm text-zinc-200">
