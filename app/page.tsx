@@ -486,7 +486,7 @@ export default function Home() {
                       ref={(el) => {
                         postRefs.current[post.id] = el
                       }}
-                      className="snap-center py-3"
+                      className="snap-start py-3"
                     >
                       <PostCard
                         post={post}
