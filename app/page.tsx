@@ -462,7 +462,7 @@ export default function Home() {
         ) : (
           <div
             ref={feedScrollRef}
-            className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll bg-black px-2 py-2"
+            className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll overflow-x-hidden rounded-t-[28px] bg-black px-2 py-2"
           >
             {readyPosts.length === 0 ? (
               <div className="flex h-full items-center justify-center px-6 text-center">

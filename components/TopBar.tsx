@@ -84,7 +84,7 @@ export default function TopBar({
   // =========================
 
   return (
-    <div className="pointer-events-none absolute left-2 right-2 top-0 z-30 rounded-t-[28px] bg-gradient-to-b from-black/55 via-black/20 to-transparent px-4 pb-6 pt-4">
+    <div className="pointer-events-none absolute left-2 right-2 top-0 z-30 bg-gradient-to-b from-black/55 via-black/20 to-transparent px-4 pb-6 pt-4">
       <div className="pointer-events-auto flex items-start justify-between gap-3">
         {/* LEFT SIDE */}
         <div>
