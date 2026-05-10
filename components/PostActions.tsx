@@ -3,6 +3,16 @@
 'use client'
 
 // =========================
+// IMPORTS
+// =========================
+
+import {
+  ArrowUpRight,
+  Heart,
+  MessageCircle,
+} from 'lucide-react'
+
+// =========================
 // TYPES
 // =========================
 
@@ -41,6 +51,9 @@ export default function PostActions({
   onLike,
   onOpenComments,
 }: PostActionsProps) {
+  const actionButtonClass =
+    'flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-md transition hover:scale-105 hover:bg-white/10 active:scale-95'
+
   return (
     <div className="flex flex-col items-center gap-4 pb-2">
       {/* AVATAR */}
@@ -69,18 +82,18 @@ export default function PostActions({
             <button
               type="button"
               onClick={onLike}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-3xl text-white backdrop-blur-md transition hover:scale-110 active:scale-95"
+              className={actionButtonClass}
               aria-label="Like post"
             >
-              <span
-                className={`transition-transform duration-200 ${
+              <Heart
+                size={34}
+                strokeWidth={2.2}
+                className={`transition duration-200 ${
                   isLiked
-                    ? 'scale-125 text-red-500'
-                    : 'scale-100 opacity-85'
+                    ? 'fill-red-500 text-red-500'
+                    : 'text-white'
                 }`}
-              >
-                {isLiked ? '♥' : '♡'}
-              </span>
+              />
             </button>
 
             <span className="text-sm font-medium text-white drop-shadow-sm">
@@ -93,10 +106,14 @@ export default function PostActions({
             <button
               type="button"
               onClick={onOpenComments}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-black/25 text-2xl text-white backdrop-blur-md transition hover:scale-105"
+              className={actionButtonClass}
               aria-label="Comments"
             >
-              💬
+              <MessageCircle
+                size={32}
+                strokeWidth={2.2}
+                className="text-white"
+              />
             </button>
           </div>
 
@@ -104,10 +121,14 @@ export default function PostActions({
           <div className="flex flex-col items-center gap-1">
             <button
               type="button"
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-black/25 text-2xl text-white backdrop-blur-md transition hover:scale-105"
+              className={actionButtonClass}
               aria-label="Share"
             >
-              ↗
+              <ArrowUpRight
+                size={32}
+                strokeWidth={2.2}
+                className="text-white"
+              />
             </button>
           </div>
         </>

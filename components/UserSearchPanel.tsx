@@ -1,4 +1,10 @@
+// ===== UserSearchPanel.tsx =====
+
 'use client'
+
+// =========================
+// IMPORTS
+// =========================
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
@@ -9,10 +15,18 @@ import {
   type UserSearchResult,
 } from '@/lib/searchUsers'
 
+// =========================
+// TYPES
+// =========================
+
 type UserSearchPanelProps = {
   open: boolean
   onClose: () => void
 }
+
+// =========================
+// COMPONENT
+// =========================
 
 export default function UserSearchPanel({
   open,
@@ -20,10 +34,18 @@ export default function UserSearchPanel({
 }: UserSearchPanelProps) {
   const router = useRouter()
 
+  // =========================
+  // STATE
+  // =========================
+
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<UserSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+
+  // =========================
+  // EFFECTS
+  // =========================
 
   useEffect(() => {
     if (!open) {
@@ -69,28 +91,37 @@ export default function UserSearchPanel({
     }
   }, [query, open])
 
+  // =========================
+  // HANDLERS
+  // =========================
+
   function openProfile(userId: string) {
     onClose()
     router.push(`/profile/${userId}`)
   }
 
+  // =========================
+  // RENDER
+  // =========================
+
   if (!open) return null
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/80 px-4 pb-4 pt-24 backdrop-blur-xl">
-      <div className="flex h-full flex-col rounded-3xl border border-white/10 bg-zinc-950 p-4 text-white">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
+    <div className="absolute inset-x-0 bottom-0 top-0 z-50 w-full overflow-hidden bg-black/80 px-4 pb-4 pt-24 text-white backdrop-blur-xl touch-pan-y">
+      <div className="mx-auto flex h-full w-full max-w-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 p-4">
+        <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">
               Search
             </p>
+
             <h2 className="text-xl font-semibold">Find users</h2>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur"
+            className="shrink-0 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm backdrop-blur"
           >
             Close
           </button>
@@ -101,10 +132,10 @@ export default function UserSearchPanel({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search username..."
           autoFocus
-          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
+          className="w-full shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
         />
 
-        <div className="no-scrollbar mt-4 flex-1 overflow-y-auto">
+        <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto overflow-x-hidden touch-pan-y">
           {query.trim().length < 2 ? (
             <p className="px-1 text-sm text-zinc-500">
               Type at least 2 characters.
@@ -112,7 +143,7 @@ export default function UserSearchPanel({
           ) : loading ? (
             <p className="px-1 text-sm text-zinc-400">Searching...</p>
           ) : results.length > 0 ? (
-            <div className="flex flex-col gap-3">
+            <div className="flex w-full flex-col gap-3 overflow-x-hidden">
               {results.map((profile) => {
                 const username = profile.username || 'unknown'
                 const avatarLetter = username.charAt(0).toUpperCase()
@@ -122,7 +153,7 @@ export default function UserSearchPanel({
                     key={profile.id}
                     type="button"
                     onClick={() => openProfile(profile.id)}
-                    className="flex items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
+                    className="flex w-full min-w-0 items-center gap-3 rounded-2xl bg-white/5 p-3 text-left transition hover:bg-white/10"
                   >
                     <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10 text-sm font-semibold text-white">
                       {profile.avatar_url ? (
