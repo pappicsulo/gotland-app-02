@@ -131,7 +131,7 @@ export default function UserSearchPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search username..."
-          autoFocus
+        
           className="w-full shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
         />
 
