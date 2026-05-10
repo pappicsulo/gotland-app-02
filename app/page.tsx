@@ -131,6 +131,9 @@ export default function Home() {
 
   const visibleMessage = createMessage || feedMessage
 
+  const panelIsOpen =
+    showCreatePanel || showSearchPanel || showNotificationsPanel
+
   const readyPosts = useMemo(
     () => posts.filter((post) => post.upload_status === 'ready'),
     [posts]
@@ -157,17 +160,13 @@ export default function Home() {
   }
 
   // =========================
-  // EFFECT: LOAD FEED AFTER AUTH
+  // EFFECTS
   // =========================
 
   useEffect(() => {
     if (authLoading) return
     void refreshAll(user?.id)
   }, [authLoading, user?.id, refreshAll])
-
-  // =========================
-  // EFFECT: AUTO-HIDE MESSAGES
-  // =========================
 
   useEffect(() => {
     if (!visibleMessage) return
@@ -182,12 +181,8 @@ export default function Home() {
     }
   }, [visibleMessage, setFeedMessage, setCreateMessage])
 
-  // =========================
-  // EFFECT: TRACK ACTIVE POST
-  // =========================
-
   useEffect(() => {
-    if (showCreatePanel || showSearchPanel || showNotificationsPanel) {
+    if (panelIsOpen) {
       setActivePostId(null)
       return
     }
@@ -244,11 +239,7 @@ export default function Home() {
       observer.disconnect()
       visibleRatios.clear()
     }
-  }, [readyPosts, showCreatePanel, showSearchPanel, showNotificationsPanel])
-
-  // =========================
-  // EFFECT: LOAD MORE POSTS
-  // =========================
+  }, [readyPosts, panelIsOpen])
 
   useEffect(() => {
     if (!activePostId) return
@@ -457,66 +448,64 @@ export default function Home() {
           }}
         />
 
-        {showCreatePanel || showSearchPanel || showNotificationsPanel ? (
-          <div className="h-full bg-black" />
-        ) : (
-          <div
-            ref={feedScrollRef}
-            className="no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll overflow-x-hidden rounded-t-[28px] bg-black px-2 py-2"
-          >
-            {readyPosts.length === 0 ? (
-              <div className="flex h-full items-center justify-center px-6 text-center">
-                <div>
-                  <p className="text-xl font-semibold">No posts yet</p>
+        <div
+          ref={feedScrollRef}
+          className={`no-scrollbar h-full snap-y snap-mandatory overflow-y-scroll overflow-x-hidden rounded-t-[28px] bg-black px-2 py-2 ${
+            panelIsOpen ? 'pointer-events-none' : ''
+          }`}
+        >
+          {readyPosts.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 text-center">
+              <div>
+                <p className="text-xl font-semibold">No posts yet</p>
 
-                  <p className="mt-2 text-zinc-400">
-                    Follow people or create the first post to build your feed.
-                  </p>
-                </div>
+                <p className="mt-2 text-zinc-400">
+                  Follow people or create the first post to build your feed.
+                </p>
               </div>
-            ) : (
-              <>
-                {readyPosts.map((post, index) => {
-                  const shouldPreload = index === activeIndex + 1
+            </div>
+          ) : (
+            <>
+              {readyPosts.map((post, index) => {
+                const shouldPreload = index === activeIndex + 1
 
-                  return (
-                    <div
-                      key={post.id}
-                      data-post-id={post.id}
-                      ref={(el) => {
-                        postRefs.current[post.id] = el
-                      }}
-                      className="snap-start py-3"
-                    >
-                      <PostCard
-                        post={post}
-                        user={user}
-                        currentUserId={user?.id ?? null}
-                        isLiked={likedPostIds.has(post.id)}
-                        likeCount={likeCounts[post.id] || 0}
-                        onLike={(postId) => handleLike(user, postId)}
-                        isActive={activePostId === post.id}
-                        shouldPreload={shouldPreload}
-                      />
-                    </div>
-                  )
-                })}
-
-                {feedLoading && hasMore && (
-                  <div className="flex h-20 items-center justify-center text-sm text-zinc-500">
-                    Loading more...
+                return (
+                  <div
+                    key={post.id}
+                    data-post-id={post.id}
+                    ref={(el) => {
+                      postRefs.current[post.id] = el
+                    }}
+                    className="snap-start py-3"
+                  >
+                    <PostCard
+                      post={post}
+                      user={user}
+                      currentUserId={user?.id ?? null}
+                      isLiked={likedPostIds.has(post.id)}
+                      likeCount={likeCounts[post.id] || 0}
+                      onLike={(postId) => handleLike(user, postId)}
+                      isActive={activePostId === post.id}
+                      shouldPreload={shouldPreload}
+                    />
                   </div>
-                )}
+                )
+              })}
 
-                {!hasMore && readyPosts.length > 0 && (
-                  <div className="flex h-20 items-center justify-center text-xs text-zinc-600">
-                    You are all caught up.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
+              {feedLoading && hasMore && (
+                <div className="flex h-20 items-center justify-center text-sm text-zinc-500">
+                  Loading more...
+                </div>
+              )}
+
+              {!hasMore && readyPosts.length > 0 && (
+                <div className="flex h-20 items-center justify-center text-xs text-zinc-600">
+                  You are all caught up.
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </MobileShell>
   )
